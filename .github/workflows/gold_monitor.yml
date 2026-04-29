@@ -2,8 +2,8 @@ name: Gold Price Monitor
 
 on:
   schedule:
-    - cron: "0 1-17 * * 1-5"   # တနင်္လာ–သောကြာ (1am-5pm UTC = 8am-midnight BKK)
-    - cron: "0 3-10 * * 6"     # စနေ (Asia session)
+    - cron: "0 1-17 * * 1-5"   # တနင်္လာ–သောကြာ 8am–midnight BKK
+    - cron: "0 3-10 * * 6"     # စနေ Asia session
   workflow_dispatch:
 
 permissions:
@@ -21,14 +21,13 @@ jobs:
         id: bkk_date
         run: echo "date=$(TZ=Asia/Bangkok date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Restore state cache
-        uses: actions/cache/restore@v4.1.0
+      - name: Cache state
+        uses: actions/cache@v4
         with:
           path: gold_state.json
           key: gold-state-${{ steps.bkk_date.outputs.date }}-${{ github.run_number }}
           restore-keys: |
             gold-state-${{ steps.bkk_date.outputs.date }}-
-            gold-state-
 
       - uses: actions/setup-python@v5
         with:
@@ -42,10 +41,3 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           DROP_THRESHOLD:     ${{ vars.DROP_THRESHOLD || '0.5' }}
         run: python gold_monitor.py
-
-      - name: Save state cache
-        if: always()
-        uses: actions/cache/save@v4.1.0
-        with:
-          path: gold_state.json
-          key: gold-state-${{ steps.bkk_date.outputs.date }}-${{ github.run_number }}
