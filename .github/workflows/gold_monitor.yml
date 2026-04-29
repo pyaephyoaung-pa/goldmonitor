@@ -2,11 +2,9 @@ name: Gold Price Monitor
 
 on:
   schedule:
-    # တစ်နာရီတစ်ကြိမ် run (UTC) — Bangkok = UTC+7
-    # 1am-5pm UTC = 8am-midnight BKK (ဈေးဖွင့်ချိန်)
-    - cron: "0 1-17 * * 1-5"   # တနင်္လာ–သောကြာ (ဈေးပိတ်ရက် ကျော်)
+    - cron: "0 1-17 * * 1-5"   # တနင်္လာ–သောကြာ (1am-5pm UTC = 8am-midnight BKK)
     - cron: "0 3-10 * * 6"     # စနေ (Asia session)
-  workflow_dispatch:            # ကိုယ်တိုင် test run လုပ်ချင်ရင် GitHub UI မှ trigger
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,18 +14,13 @@ jobs:
     name: Check Gold Price
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ── 2. Get today's date (Bangkok) ────────────────────────
       - name: Get Bangkok date
         id: bkk_date
         run: echo "date=$(TZ=Asia/Bangkok date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      # ── 3. Restore today's state cache ───────────────────────
       - name: Restore state cache
         uses: actions/cache/restore@v4
         with:
@@ -37,23 +30,19 @@ jobs:
             gold-state-${{ steps.bkk_date.outputs.date }}-
             gold-state-
 
-      # ── 4. Setup Python ───────────────────────────────────────
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install requests pytz
+      - run: pip install requests pytz
 
-      # ── 5. Run monitor ────────────────────────────────────────
       - name: Run gold monitor
         env:
-          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
-          DROP_THRESHOLD: ${{ vars.DROP_THRESHOLD || '0.5' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          DROP_THRESHOLD:     ${{ vars.DROP_THRESHOLD || '0.5' }}
         run: python gold_monitor.py
 
-      # ── 6. Save state cache ───────────────────────────────────
       - name: Save state cache
         if: always()
         uses: actions/cache/save@v4
