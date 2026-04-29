@@ -22,7 +22,7 @@ jobs:
         run: echo "date=$(TZ=Asia/Bangkok date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Restore state cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v4.1.0
         with:
           path: gold_state.json
           key: gold-state-${{ steps.bkk_date.outputs.date }}-${{ github.run_number }}
@@ -45,7 +45,7 @@ jobs:
 
       - name: Save state cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v4.1.0
         with:
           path: gold_state.json
           key: gold-state-${{ steps.bkk_date.outputs.date }}-${{ github.run_number }}
