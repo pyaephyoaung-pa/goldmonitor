@@ -1,5 +1,5 @@
 """
-Vercel Serverless Function — Telegram Webhook Handler
+Vercel Serverless Function â Telegram Webhook Handler
 Receives POST from Telegram, processes commands, replies instantly.
 """
 
@@ -8,8 +8,7 @@ import os
 import sys
 from http.server import BaseHTTPRequestHandler
 
-# Add parent dir to path so we can import our modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# storage.py and predictor.py are in the same directory (api/)
 
 import html as html_module
 import re
@@ -75,7 +74,7 @@ def get_updates(offset: int = 0) -> list:
         return []
 
 
-# ── Price Fetch (shared with gold_monitor) ──────────────────────
+# ââ Price Fetch (shared with gold_monitor) ââââââââââââââââââââââ
 
 def fetch_gold_price() -> tuple:
     """Fetch current gold price. Returns (thb_gram, usd_oz, thb_rate)."""
@@ -110,44 +109,44 @@ def fetch_gold_price() -> tuple:
 
 
 def fmt(n):
-    return f"฿{n:,.0f}"
+    return f"à¸¿{n:,.0f}"
 
 
-# ── Command Handlers ────────────────────────────────────────────
+# ââ Command Handlers ââââââââââââââââââââââââââââââââââââââââââââ
 
 def cmd_price(chat_id: str):
     """Show current price with quick technical analysis."""
     thb_gram, usd_oz, thb_rate = fetch_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရပါ — API error", chat_id)
+        send_message("â ï¸ áá±á¸áá¾á¯ááºá¸ áá°áááá« â API error", chat_id)
         return
 
     history = storage.get_price_history()
     trend = predictor.get_trend_summary(history) if history else {}
 
     lines = [
-        f"💰 <b>ရွှေဈေး အခုလက်ရှိ</b>",
-        f"━━━━━━━━━━━━━━━",
-        f"🇹🇭 THB : {fmt(thb_gram)}/gram",
-        f"🌐 USD : ${usd_oz}/oz",
-        f"💱 Rate: 1 USD = {thb_rate} THB",
+        f"ð° <b>áá½á¾á±áá±á¸ á¡áá¯áááºáá¾á­</b>",
+        f"âââââââââââââââ",
+        f"ð¹ð­ THB : {fmt(thb_gram)}/gram",
+        f"ð USD : ${usd_oz}/oz",
+        f"ð± Rate: 1 USD = {thb_rate} THB",
     ]
 
     if trend.get("change_1h") is not None:
-        lines.append(f"\n📊 <b>Changes:</b>")
+        lines.append(f"\nð <b>Changes:</b>")
         for key, label in [("change_1h", "1h"), ("change_4h", "4h"),
                            ("change_24h", "24h"), ("change_7d", "7d")]:
             if key in trend:
-                arrow = "📈" if trend[key] > 0 else "📉" if trend[key] < 0 else "➡️"
+                arrow = "ð" if trend[key] > 0 else "ð" if trend[key] < 0 else "â¡ï¸"
                 lines.append(f"  {arrow} {label}: {trend[key]:+.3f}%")
 
     # Quick TA
     if len(history) >= 14:
         ta = predictor.analyze(history)
         if ta.get("overall_signal"):
-            lines.append(f"\n🎯 Signal: <b>{ta['overall_signal']}</b>")
+            lines.append(f"\nð¯ Signal: <b>{ta['overall_signal']}</b>")
         if ta.get("rsi"):
-            lines.append(f"📊 RSI: {ta['rsi']}")
+            lines.append(f"ð RSI: {ta['rsi']}")
 
     send_message("\n".join(lines), chat_id)
 
@@ -157,9 +156,9 @@ def cmd_predict(chat_id: str):
     history = storage.get_price_history()
     if len(history) < 15:
         send_message(
-            f"📊 Data points: {len(history)}/100\n"
+            f"ð Data points: {len(history)}/100\n"
             f"TA requires 15+, ML requires 100+.\n"
-            f"Keep running — data accumulates every hour!",
+            f"Keep running â data accumulates every hour!",
             chat_id,
         )
         return
@@ -176,29 +175,29 @@ def cmd_bought(chat_id: str, args: str):
         amount = float(args.strip())
     except (ValueError, AttributeError):
         send_message(
-            "📝 Usage: <code>/bought 5000</code>\n"
-            "5000 = ဝယ်ယူသည့် ငွေပမာဏ (THB)",
+            "ð Usage: <code>/bought 5000</code>\n"
+            "5000 = áááºáá°ááá·áº áá½á±ááá¬á (THB)",
             chat_id,
         )
         return
 
     if amount <= 0:
-        send_message("⚠️ ပမာဏ 0 ထက်ကြီးရပါမည်", chat_id)
+        send_message("â ï¸ ááá¬á 0 áááºáá¼á®á¸ááá«áááº", chat_id)
         return
 
     thb_gram, _, _ = fetch_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရ — ထပ်ကြိုးစားပါ", chat_id)
+        send_message("â ï¸ áá±á¸áá¾á¯ááºá¸ áá°áá â áááºáá¼á­á¯á¸áá¬á¸áá«", chat_id)
         return
 
     entry = storage.log_buy(amount, thb_gram)
     send_message(
-        f"✅ <b>ဝယ်ယူမှု မှတ်တမ်းတင်ပြီး!</b>\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"💵 ပမာဏ: {fmt(amount)}\n"
-        f"💰 ဈေးနှုန်း: {fmt(thb_gram)}/gram\n"
-        f"⚖️ ရွှေ: {entry['grams']:.4f} grams\n"
-        f"📅 {datetime.now(BANGKOK_TZ).strftime('%d %b %Y %H:%M')}",
+        f"â <b>áááºáá°áá¾á¯ áá¾ááºáááºá¸áááºáá¼á®á¸!</b>\n"
+        f"âââââââââââââââ\n"
+        f"ðµ ááá¬á: {fmt(amount)}\n"
+        f"ð° áá±á¸áá¾á¯ááºá¸: {fmt(thb_gram)}/gram\n"
+        f"âï¸ áá½á¾á±: {entry['grams']:.4f} grams\n"
+        f"ð {datetime.now(BANGKOK_TZ).strftime('%d %b %Y %H:%M')}",
         chat_id,
     )
 
@@ -207,38 +206,38 @@ def cmd_portfolio(chat_id: str):
     """Show portfolio summary with P&L."""
     thb_gram, _, _ = fetch_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရပါ", chat_id)
+        send_message("â ï¸ áá±á¸áá¾á¯ááºá¸ áá°áááá«", chat_id)
         return
 
     pnl = storage.get_portfolio_pnl(thb_gram)
     if pnl["num_buys"] == 0:
         send_message(
-            "📂 ဝယ်ယူမှု မှတ်တမ်း မရှိသေးပါ\n"
+            "ð áááºáá°áá¾á¯ áá¾ááºáááºá¸ ááá¾á­áá±á¸áá«\n"
             "Use: <code>/bought 5000</code> to log a purchase",
             chat_id,
         )
         return
 
-    profit_emoji = "🟢" if pnl["pnl_thb"] >= 0 else "🔴"
+    profit_emoji = "ð¢" if pnl["pnl_thb"] >= 0 else "ð´"
     lines = [
-        f"📊 <b>ရွှေ Portfolio</b>",
-        f"━━━━━━━━━━━━━━━",
-        f"📦 Total buys: {pnl['num_buys']}",
-        f"💵 Invested: {fmt(pnl['total_invested'])}",
-        f"⚖️ Total gold: {pnl['total_grams']:.4f} grams",
-        f"📈 Avg cost: {fmt(pnl['avg_cost'])}/gram",
-        f"💰 Current price: {fmt(pnl['current_price'])}/gram",
-        f"━━━━━━━━━━━━━━━",
-        f"💎 Current value: {fmt(pnl['current_value'])}",
+        f"ð <b>áá½á¾á± Portfolio</b>",
+        f"âââââââââââââââ",
+        f"ð¦ Total buys: {pnl['num_buys']}",
+        f"ðµ Invested: {fmt(pnl['total_invested'])}",
+        f"âï¸ Total gold: {pnl['total_grams']:.4f} grams",
+        f"ð Avg cost: {fmt(pnl['avg_cost'])}/gram",
+        f"ð° Current price: {fmt(pnl['current_price'])}/gram",
+        f"âââââââââââââââ",
+        f"ð Current value: {fmt(pnl['current_value'])}",
         f"{profit_emoji} P&L: {fmt(pnl['pnl_thb'])} ({pnl['pnl_pct']:+.2f}%)",
     ]
 
     # Recent buys
     if pnl["buys"]:
-        lines.append(f"\n📝 <b>Recent buys:</b>")
+        lines.append(f"\nð <b>Recent buys:</b>")
         for b in pnl["buys"][-5:]:
             ts = b["ts"][:10]
-            lines.append(f"  • {ts}: {fmt(b['amount_thb'])} @ {fmt(b['price_per_gram'])}/g")
+            lines.append(f"  â¢ {ts}: {fmt(b['amount_thb'])} @ {fmt(b['price_per_gram'])}/g")
 
     send_message("\n".join(lines), chat_id)
 
@@ -253,7 +252,7 @@ def cmd_history(chat_id: str, args: str):
 
     history = storage.get_price_history()
     if len(history) < 2:
-        send_message("📊 Data collecting — not enough history yet", chat_id)
+        send_message("ð Data collecting â not enough history yet", chat_id)
         return
 
     # Group by date
@@ -266,7 +265,7 @@ def cmd_history(chat_id: str, args: str):
         daily[date]["usd"].append(h.get("usd_oz", 0))
 
     dates = sorted(daily.keys())[-days:]
-    lines = [f"📊 <b>ရွှေဈေး {len(dates)}-Day History</b>", "━━━━━━━━━━━━━━━"]
+    lines = [f"ð <b>áá½á¾á±áá±á¸ {len(dates)}-Day History</b>", "âââââââââââââââ"]
 
     for date in dates:
         d = daily[date]
@@ -276,7 +275,7 @@ def cmd_history(chat_id: str, args: str):
         close = p[-1]
         opn = p[0]
         change = ((close - opn) / opn) * 100
-        arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+        arrow = "ð" if change > 0 else "ð" if change < 0 else "â¡ï¸"
         lines.append(
             f"{arrow} {date}: {fmt(close)} "
             f"(H:{fmt(high)} L:{fmt(low)} {change:+.2f}%)"
@@ -294,16 +293,16 @@ def cmd_setthreshold(chat_id: str, args: str):
         return
 
     if val <= 0 or val > 10:
-        send_message("⚠️ 0.1 — 10 ကြား ဖြစ်ရပါမည်", chat_id)
+        send_message("â ï¸ 0.1 â 10 áá¼á¬á¸ áá¼ááºááá«áááº", chat_id)
         return
 
     bot_state = storage.load_bot_state()
     bot_state["drop_threshold"] = val
     storage.save_bot_state(bot_state)
     send_message(
-        f"✅ Alert threshold → <b>{val}%</b>\n"
-        f"🟡 Buy alert: ≥{val}% drop\n"
-        f"🔴 Strong alert: ≥{val * 1.5}% drop",
+        f"â Alert threshold â <b>{val}%</b>\n"
+        f"ð¡ Buy alert: â¥{val}% drop\n"
+        f"ð´ Strong alert: â¥{val * 1.5}% drop",
         chat_id,
     )
 
@@ -311,22 +310,22 @@ def cmd_setthreshold(chat_id: str, args: str):
 def cmd_help(chat_id: str):
     """Show available commands."""
     send_message(
-        "🤖 <b>Gold Monitor Commands</b>\n"
-        "━━━━━━━━━━━━━━━\n"
-        "💰 /price — လက်ရှိ ရွှေဈေး\n"
-        "🔮 /predict — 4h/12h/24h ခန့်မှန်းချက်\n"
-        "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
-        "📊 /portfolio — Portfolio P&L\n"
-        "📈 /history [N] — N-day ဈေးသမိုင်း\n"
-        "⚙️ /setthreshold N — Alert % ပြောင်းပါ\n"
-        "❓ /help — ဤ menu\n"
-        "━━━━━━━━━━━━━━━\n"
-        "ℹ️ Instant replies via webhook",
+        "ð¤ <b>Gold Monitor Commands</b>\n"
+        "âââââââââââââââ\n"
+        "ð° /price â áááºáá¾á­ áá½á¾á±áá±á¸\n"
+        "ð® /predict â 4h/12h/24h ááá·áºáá¾ááºá¸áá»ááº\n"
+        "ð /bought &lt;THB&gt; â áááºáá°áá¾á¯ áá¾ááºáá«\n"
+        "ð /portfolio â Portfolio P&L\n"
+        "ð /history [N] â N-day áá±á¸ááá­á¯ááºá¸\n"
+        "âï¸ /setthreshold N â Alert % áá¼á±á¬ááºá¸áá«\n"
+        "â /help â á¤ menu\n"
+        "âââââââââââââââ\n"
+        "â¹ï¸ Instant replies via webhook",
         chat_id,
     )
 
 
-# ── Main: Poll and Dispatch ─────────────────────────────────────
+# ââ Main: Poll and Dispatch âââââââââââââââââââââââââââââââââââââ
 
 COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
@@ -339,7 +338,7 @@ COMMANDS = {
     "/start": lambda cid, _: cmd_help(cid),
 }
 
-# ── Vercel Handler ─────────────────────────────────────────────
+# ââ Vercel Handler âââââââââââââââââââââââââââââââââââââââââââââ
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
