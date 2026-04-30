@@ -1,19 +1,18 @@
-name: Gold Price Monitor
+name: Telegram Bot Commands
 
 on:
   schedule:
-    - cron: "0 1-17 * * 1-5"   # Mon-Fri: 8am-midnight BKK (UTC+7)
-    - cron: "0 3-10 * * 6"     # Sat: Asia session
+    - cron: "*/5 * * * *"    # Every 5 minutes, 24/7
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  monitor:
-    name: Check Gold Price
+  poll:
+    name: Check Telegram Commands
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
@@ -24,11 +23,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run gold monitor
+      - name: Process bot commands
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          DROP_THRESHOLD:     ${{ vars.DROP_THRESHOLD || '0.5' }}
           GIST_GITHUB_TOKEN:  ${{ secrets.GIST_GITHUB_TOKEN }}
           GIST_ID:            ${{ secrets.GIST_ID }}
-        run: python gold_monitor.py
+        run: python bot_commands.py
