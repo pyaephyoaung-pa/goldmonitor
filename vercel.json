@@ -5,7 +5,7 @@
       "src": "api/webhook.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": "../storage.py,../predictor.py"
+        "includeFiles": "storage.py,predictor.py"
       }
     }
   ],
