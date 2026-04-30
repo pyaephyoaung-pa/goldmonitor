@@ -15,6 +15,7 @@ Commands:
 
 import requests
 import os
+import html as html_module
 from datetime import datetime
 import pytz
 
@@ -38,7 +39,22 @@ def send_message(text: str, chat_id: str = ""):
             json={"chat_id": cid, "text": text, "parse_mode": "HTML"},
             timeout=10,
         )
-        print(f"[bot] Sent message to {cid}: status={r.status_code}")
+        resp = r.json()
+        if resp.get("ok"):
+            print(f"[bot] Sent message to {cid}: OK (msg_id={resp['result']['message_id']})")
+        else:
+            print(f"[bot] Telegram error: {resp.get('description', 'unknown')} (code={resp.get('error_code')})")
+            if resp.get("error_code") == 400:
+                r2 = requests.post(
+                    f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": cid, "text": text},
+                    timeout=10,
+                )
+                resp2 = r2.json()
+                if resp2.get("ok"):
+                    print(f"[bot] Retry without HTML: OK")
+                else:
+                    print(f"[bot] Retry also failed: {resp2.get('description')}")
     except Exception as e:
         print(f"[bot] Send error: {e}")
 
@@ -356,18 +372,33 @@ def process_commands():
         cmd = parts[0].lower().split("@")[0]  # Remove @botname suffix
         args = parts[1] if len(parts) > 1 else ""
 
+        # Smart matching: if exact cmd not found, try prefix match
+        handler = COMMANDS.get(cmd)
+        if not handler:
+            import re
+            m = re.match(r'^(/\w+)', cmd)
+            if m:
+                base_cmd = m.group(1)
+                if base_cmd in COMMANDS:
+                    extra = cmd[len(base_cmd):]
+                    extra = re.sub(r'[<>]', '', extra).strip()
+                    if extra and not args:
+                        args = extra
+                    cmd = base_cmd
+                    handler = COMMANDS.get(cmd)
+
         print(f"[bot] Command: {cmd} args='{args}' from chat={chat_id}")
 
-        handler = COMMANDS.get(cmd)
         if handler:
             try:
                 handler(chat_id, args)
             except Exception as e:
                 print(f"[bot] Command error: {e}")
-                send_message(f"⚠️ Error: {e}", chat_id)
+                send_message(f"⚠️ Error: {html_module.escape(str(e))}", chat_id)
         else:
+            safe_cmd = html_module.escape(cmd)
             send_message(
-                f"❓ Unknown command: {cmd}\nType /help for available commands",
+                f"❓ Unknown command: {safe_cmd}\nType /help for available commands",
                 chat_id,
             )
 
