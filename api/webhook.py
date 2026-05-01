@@ -275,6 +275,28 @@ def cmd_setthreshold(chat_id: str, args: str):
     )
 
 
+def cmd_setrisethreshold(chat_id: str, args: str):
+    try:
+        val = float(args.strip())
+    except (ValueError, AttributeError):
+        send_message("Usage: <code>/setrisethreshold 0.5</code>", chat_id)
+        return
+
+    if val <= 0 or val > 10:
+        send_message("⚠️ 0.1 — 10 ကြား ဖြစ်ရပါမည်", chat_id)
+        return
+
+    bot_state = storage.load_bot_state()
+    bot_state["rise_threshold"] = val
+    storage.save_bot_state(bot_state)
+    send_message(
+        f"✅ Rise alert threshold → <b>{val}%</b>\n"
+        f"🟢 Rise alert: ≥{val}% rise\n"
+        f"🟣 Strong alert: ≥{val * 1.5}% rise",
+        chat_id,
+    )
+
+
 def cmd_help(chat_id: str):
     send_message(
         "🤖 <b>Gold Monitor Commands</b>\n"
@@ -284,7 +306,8 @@ def cmd_help(chat_id: str):
         "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
         "📊 /portfolio — Portfolio P&L\n"
         "📈 /history [N] — N-day ဈေးသမိုင်း\n"
-        "⚙️ /setthreshold N — Alert % ပြောင်းပါ\n"
+        "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
+        "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
         "❓ /help — ဤ menu\n"
         "━━━━━━━━━━━━━━━\n"
         "⚡ Instant replies via webhook",
@@ -299,6 +322,7 @@ COMMANDS = {
     "/portfolio": lambda cid, _: cmd_portfolio(cid),
     "/history": cmd_history,
     "/setthreshold": cmd_setthreshold,
+    "/setrisethreshold": cmd_setrisethreshold,
     "/help": lambda cid, _: cmd_help(cid),
     "/start": lambda cid, _: cmd_help(cid),
 }
@@ -315,7 +339,7 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"[webhook] Parse error: {e}")
             self.send_response(400)
-            self.end_headers()
+            send_headers()
             return
 
         # Optional: verify secret token
