@@ -44,6 +44,7 @@ def send_message(text: str, chat_id: str = ""):
             print(f"[bot] Sent message to {cid}: OK (msg_id={resp['result']['message_id']})")
         else:
             print(f"[bot] Telegram error: {resp.get('description', 'unknown')} (code={resp.get('error_code')})")
+            # Retry without HTML parse_mode in case of formatting error
             if resp.get("error_code") == 400:
                 r2 = requests.post(
                     f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
@@ -309,6 +310,28 @@ def cmd_setthreshold(chat_id: str, args: str):
     )
 
 
+def cmd_setrisethreshold(chat_id: str, args: str):
+    try:
+        val = float(args.strip())
+    except (ValueError, AttributeError):
+        send_message("Usage: <code>/setrisethreshold 0.5</code>", chat_id)
+        return
+
+    if val <= 0 or val > 10:
+        send_message("⚠️ 0.1 — 10 ကြား ဖြစ်ရပါမည်", chat_id)
+        return
+
+    bot_state = storage.load_bot_state()
+    bot_state["rise_threshold"] = val
+    storage.save_bot_state(bot_state)
+    send_message(
+        f"✅ Rise alert threshold → <b>{val}%</b>\n"
+        f"🟢 Rise alert: ≥{val}% rise\n"
+        f"🟣 Strong alert: ≥{val * 1.5}% rise",
+        chat_id,
+    )
+
+
 def cmd_help(chat_id: str):
     """Show available commands."""
     send_message(
@@ -319,10 +342,11 @@ def cmd_help(chat_id: str):
         "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
         "📊 /portfolio — Portfolio P&L\n"
         "📈 /history [N] — N-day ဈေးသမိုင်း\n"
-        "⚙️ /setthreshold N — Alert % ပြောင်းပါ\n"
+        "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
+        "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
         "❓ /help — ဤ menu\n"
         "━━━━━━━━━━━━━━━\n"
-        "ℹ️ Commands are checked every 5 minutes",
+        "⚡ Instant replies via webhook",
         chat_id,
     )
 
@@ -336,6 +360,7 @@ COMMANDS = {
     "/portfolio": lambda cid, _: cmd_portfolio(cid),
     "/history": cmd_history,
     "/setthreshold": cmd_setthreshold,
+    "/setrisethreshold": cmd_setrisethreshold,
     "/help": lambda cid, _: cmd_help(cid),
     "/start": lambda cid, _: cmd_help(cid),
 }
@@ -373,6 +398,7 @@ def process_commands():
         args = parts[1] if len(parts) > 1 else ""
 
         # Smart matching: if exact cmd not found, try prefix match
+        # Handles cases like "/bought5000" or "/bought<5000>"
         handler = COMMANDS.get(cmd)
         if not handler:
             import re
@@ -380,7 +406,9 @@ def process_commands():
             if m:
                 base_cmd = m.group(1)
                 if base_cmd in COMMANDS:
+                    # Extract the rest as args
                     extra = cmd[len(base_cmd):]
+                    # Clean angle brackets if user copied template
                     extra = re.sub(r'[<>]', '', extra).strip()
                     if extra and not args:
                         args = extra
