@@ -27,12 +27,15 @@ BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 DROP_THRESHOLD = float(os.environ.get("DROP_THRESHOLD", "0.5"))
+RISE_THRESHOLD = float(os.environ.get("RISE_THRESHOLD", "0.5"))
 
-# Try to load threshold from bot state (user-configurable via /setthreshold)
+# Try to load thresholds from bot state (user-configurable via /setthreshold, /setrisethreshold)
 try:
     _bot_state = storage.load_bot_state()
     if "drop_threshold" in _bot_state:
         DROP_THRESHOLD = _bot_state["drop_threshold"]
+    if "rise_threshold" in _bot_state:
+        RISE_THRESHOLD = _bot_state["rise_threshold"]
 except Exception:
     pass
 
@@ -119,6 +122,10 @@ def drop_pct(open_p, cur):
     return ((open_p - cur) / open_p) * 100
 
 
+def rise_pct(open_p, cur):
+    return ((cur - open_p) / open_p) * 100
+
+
 # ── Main Monitor ────────────────────────────────────────────────
 
 def main():
@@ -178,7 +185,7 @@ def main():
             f"💰 Open ဈေး : {fmt(thb_gram)}/g\n"
             f"🌐 Spot     : ${usd_oz}/oz\n"
             f"💱 Rate     : 1 USD = {thb_rate} THB\n"
-            f"⚙️ Alert at  : &gt;{DROP_THRESHOLD}% drop"
+            f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
             f"{trend_lines}{ta_line}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"✅ Monitoring စပြီ!"
@@ -230,10 +237,49 @@ def main():
         )
         state["notified_strong"] = True
 
-    # Reset notifications if price recovers
+    # Reset drop notifications if price recovers
     if d < DROP_THRESHOLD * 0.3:
         state["notified_buy"] = False
         state["notified_strong"] = False
+
+    # ── Rise Alert (intraday rise) ─────────────────────────────
+    r = rise_pct(state["open_price"], thb_gram)
+    if r >= RISE_THRESHOLD and not state.get("notified_rise"):
+        ta_signal = f"\n🎯 TA Signal: {ta['overall_signal']}" if ta.get("overall_signal") else ""
+        rsi_line = f"\n📊 RSI: {ta['rsi']}" if ta.get("rsi") else ""
+
+        notify(
+            f"🟢 <b>ရွှေဈေး တက်နေပါတယ်!</b>\n"
+            f"⏰ {time_str}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
+            f"📈 Open    : {fmt(state['open_price'])}/g\n"
+            f"🚀 တက်မှု   : +{r:.2f}%\n"
+            f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g"
+            f"{ta_signal}{rsi_line}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💎 Portfolio တန်ဖိုး တက်နေပါပြီ!"
+        )
+        state["notified_rise"] = True
+
+    # ── Strong Rise Alert ──────────────────────────────────────
+    if r >= RISE_THRESHOLD * 1.5 and not state.get("notified_strong_rise"):
+        notify(
+            f"🟣 <b>ရွှေဈေး ကြီးစွာ တက်!</b>\n"
+            f"⏰ {time_str}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
+            f"🚀 တက်မှု   : +{r:.2f}%\n"
+            f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"📊 Profit ယူရန် စဉ်းစားပါ!"
+        )
+        state["notified_strong_rise"] = True
+
+    # Reset rise notifications if price drops back
+    if r < RISE_THRESHOLD * 0.3:
+        state["notified_rise"] = False
+        state["notified_strong_rise"] = False
 
     # ── Evening Summary (8–9pm BKK) ────────────────────────────
     if 20 <= hour <= 21 and not state["evening_sent"]:
