@@ -26,7 +26,7 @@ HEADERS = {
 }
 
 
-# ── Low-level Gist I/O ─────────────────────────────────────────
+# ── Low-level Gist I/O ──────────────────────────────────
 def _get_gist() -> dict:
     """Fetch the entire Gist."""
     if not GITHUB_TOKEN or not GIST_ID:
@@ -92,7 +92,7 @@ def _write_files(file_dict: dict):
         print(f"[storage] Gist batch write error: {e}")
 
 
-# ── Price History ───────────────────────────────────────────────
+# ── Price History ────────────────────────────────────────
 def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
     """Append a price data point. Keep last 720 entries (~30 days hourly)."""
     history = _read_file(PRICE_HISTORY_FILE)
@@ -118,10 +118,10 @@ def get_price_history(limit: int = 720) -> list:
     return history[-limit:]
 
 
-# ── Day State (replaces gold_state.json) ────────────────────────
+# ── Day State (replaces gold_state.json) ────────────────────
 def load_day_state() -> dict:
     """Load today's state, reset if date changed."""
-    today = datetime.now(BANGKOK_TZ).strftime("%Y-%m-%d")
+    today = datetime.now(BAGKOK_TZ).strftime("%Y-%m-%d")
     state = _read_file(DAY_STATE_FILE)
     if state.get("date") == today:
         return state
@@ -132,6 +132,8 @@ def load_day_state() -> dict:
         "day_high": None,
         "notified_buy": False,
         "notified_strong": False,
+        "notified_rise": False,
+        "notified_strong_rise": False,
         "evening_sent": False,
     }
 
@@ -140,11 +142,11 @@ def save_day_state(state: dict):
     _write_file(DAY_STATE_FILE, state)
 
 
-# ── Buy Log / Portfolio ─────────────────────────────────────────
+# ── Buy Log / Portfolio ──────────────────────────────────
 def log_buy(amount_thb: float, price_per_gram: float):
     """Log a gold purchase."""
     buys = _read_file(BUY_LOG_FILE)
-    now = datetime.now(BANGKOK_TZ)
+    now = datetime.now(BAGKOK_TZ)
     grams = round(amount_thb / price_per_gram, 4)
     entry = {
         "ts": now.isoformat(),
