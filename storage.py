@@ -132,6 +132,8 @@ def load_day_state() -> dict:
         "day_high": None,
         "notified_buy": False,
         "notified_strong": False,
+        "notified_rise": False,
+        "notified_strong_rise": False,
         "evening_sent": False,
     }
 
