@@ -92,6 +92,22 @@ def fmt(n):
     return f"฿{n:,.0f}"
 
 
+BAHT_WEIGHT_GRAMS = 15.244  # 1 บาททอง = 15.244 grams
+
+
+def gold_breakdown(thb_gram_9999):
+    """Calculate gold prices for 99.99% and 96.50% purity."""
+    baht_9999 = round(thb_gram_9999 * BAHT_WEIGHT_GRAMS, 2)
+    gram_9650 = round(thb_gram_9999 * (96.50 / 99.99), 2)
+    baht_9650 = round(gram_9650 * BAHT_WEIGHT_GRAMS, 2)
+    return {
+        "gram_9999": thb_gram_9999,
+        "baht_9999": baht_9999,
+        "gram_9650": gram_9650,
+        "baht_9650": baht_9650,
+    }
+
+
 # ── Command Handlers ───────────────────────────────────────────
 
 def cmd_price(chat_id: str):
@@ -102,11 +118,18 @@ def cmd_price(chat_id: str):
 
     history = storage.get_price_history()
     trend = predictor.get_trend_summary(history) if history else {}
+    gb = gold_breakdown(thb_gram)
 
     lines = [
         f"💰 <b>ရွှေဈေး အခုလက်ရှိ</b>",
         f"━━━━━━━━━━━━━━━",
-        f"🇹🇭 THB : {fmt(thb_gram)}/gram",
+        f"🥇 <b>99.99% (Pure)</b>",
+        f"  ဘတ်သား: {fmt(gb['baht_9999'])}",
+        f"  1g: {fmt(gb['gram_9999'])}",
+        f"🥈 <b>96.50%</b>",
+        f"  ဘတ်သား: {fmt(gb['baht_9650'])}",
+        f"  1g: {fmt(gb['gram_9650'])}",
+        f"━━━━━━━━━━━━━━━",
         f"🌐 USD : ${usd_oz}/oz",
         f"💱 Rate: 1 USD = {thb_rate} THB",
     ]
@@ -339,7 +362,7 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"[webhook] Parse error: {e}")
             self.send_response(400)
-            send_headers()
+            self.end_headers()
             return
 
         # Optional: verify secret token
