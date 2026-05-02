@@ -126,6 +126,22 @@ def rise_pct(open_p, cur):
     return ((cur - open_p) / open_p) * 100
 
 
+BAHT_WEIGHT_GRAMS = 15.244  # 1 บาททอง = 15.244 grams
+
+
+def gold_breakdown(thb_gram_9999):
+    """Calculate gold prices for 99.99% and 96.50% purity."""
+    baht_9999 = round(thb_gram_9999 * BAHT_WEIGHT_GRAMS, 2)
+    gram_9650 = round(thb_gram_9999 * (96.50 / 99.99), 2)
+    baht_9650 = round(gram_9650 * BAHT_WEIGHT_GRAMS, 2)
+    return {
+        "gram_9999": thb_gram_9999,
+        "baht_9999": baht_9999,
+        "gram_9650": gram_9650,
+        "baht_9650": baht_9650,
+    }
+
+
 # ── Main Monitor ────────────────────────────────────────────────
 
 def main():
@@ -178,11 +194,18 @@ def main():
             if ta.get("overall_signal"):
                 ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
 
+        gb = gold_breakdown(thb_gram)
         notify(
             f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
             f"📅 {time_str} (BKK)\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 Open ဈေး : {fmt(thb_gram)}/g\n"
+            f"🥇 <b>99.99% (Pure)</b>\n"
+            f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
+            f"  1g: {fmt(gb['gram_9999'])}\n"
+            f"🥈 <b>96.50%</b>\n"
+            f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
+            f"  1g: {fmt(gb['gram_9650'])}\n"
+            f"━━━━━━━━━━━━━━━\n"
             f"🌐 Spot     : ${usd_oz}/oz\n"
             f"💱 Rate     : 1 USD = {thb_rate} THB\n"
             f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
@@ -217,7 +240,7 @@ def main():
             f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g"
             f"{ta_signal}{rsi_line}\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"👉 YLG Get Gold ဖွင့်ဝယ်ပါ!\n"
+            f"👉 YLG Get Gold ဖြင့်ဝယ်ပါ!\n"
             f"📝 ဝယ်ပြီးရင် /bought &lt;THB&gt; ပို့ပါ"
         )
         state["notified_buy"] = True
