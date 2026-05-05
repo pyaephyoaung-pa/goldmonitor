@@ -23,6 +23,7 @@ BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
 
 
 # ── Telegram Send ──────────────────────────────────────────────
@@ -60,18 +61,21 @@ def send_message(text: str, chat_id: str = ""):
 
 def fetch_gold_price() -> tuple:
     """Fetch current gold price. Returns (thb_gram, usd_oz, thb_rate)."""
+    # Primary: Twelve Data
     try:
-        r = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+        r = requests.get(
+            "https://api.twelvedata.com/price",
+            params={"symbol": "XAU/USD", "apikey": TWELVE_DATA_API_KEY},
+            timeout=10,
+        )
         r.raise_for_status()
-        usd_oz = float(r.json()[0]["gold"])
+        usd_oz = float(r.json()["price"])
     except Exception:
+        # Fallback: metals.live
         try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d",
-                headers=headers, timeout=10,
-            )
-            usd_oz = r.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+            r = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+            r.raise_for_status()
+            usd_oz = float(r.json()[0]["gold"])
         except Exception as e:
             print(f"[webhook] Price fetch failed: {e}")
             return None, None, None
