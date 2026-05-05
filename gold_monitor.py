@@ -28,6 +28,7 @@ TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 DROP_THRESHOLD = float(os.environ.get("DROP_THRESHOLD", "0.5"))
 RISE_THRESHOLD = float(os.environ.get("RISE_THRESHOLD", "0.5"))
+TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
 
 # Try to load thresholds from bot state (user-configurable via /setthreshold, /setrisethreshold)
 try:
@@ -50,21 +51,21 @@ def get_gold_price(retries: int = 2) -> tuple:
         usd_oz = None
         thb_rate = None
 
-        # Gold spot price — primary API
+        # Gold spot price — primary: Twelve Data
         try:
-            r = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+            r = requests.get(
+                "https://api.twelvedata.com/price",
+                params={"symbol": "XAU/USD", "apikey": TWELVE_DATA_API_KEY},
+                timeout=10,
+            )
             r.raise_for_status()
-            usd_oz = float(r.json()[0]["gold"])
+            usd_oz = float(r.json()["price"])
         except Exception:
-            # Fallback: Yahoo Finance
+            # Fallback: metals.live
             try:
-                headers = {"User-Agent": "Mozilla/5.0"}
-                r = requests.get(
-                    "https://query1.finance.yahoo.com/v8/finance/chart/GC=F"
-                    "?interval=1m&range=1d",
-                    headers=headers, timeout=10,
-                )
-                usd_oz = r.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+                r = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+                r.raise_for_status()
+                usd_oz = float(r.json()[0]["gold"])
             except Exception as e:
                 if attempt < retries:
                     print(f"[retry {attempt+1}] Gold price failed: {e}")
@@ -240,7 +241,7 @@ def main():
             f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g"
             f"{ta_signal}{rsi_line}\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"👉 YLG Get Gold ဖြင့်ဝယ်ပါ!\n"
+            f"👉 YLG Get Gold ဖွင့်ဝယ်ပါ!\n"
             f"📝 ဝယ်ပြီးရင် /bought &lt;THB&gt; ပို့ပါ"
         )
         state["notified_buy"] = True
