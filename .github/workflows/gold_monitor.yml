@@ -26,9 +26,10 @@ jobs:
 
       - name: Run gold monitor
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          DROP_THRESHOLD:     ${{ vars.DROP_THRESHOLD || '0.5' }}
-          GIST_GITHUB_TOKEN:  ${{ secrets.GIST_GITHUB_TOKEN }}
-          GIST_ID:            ${{ secrets.GIST_ID }}
+          TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+          DROP_THRESHOLD:       ${{ vars.DROP_THRESHOLD || '0.5' }}
+          GIST_GITHUB_TOKEN:    ${{ secrets.GIST_GITHUB_TOKEN }}
+          GIST_ID:              ${{ secrets.GIST_ID }}
+          TWELVE_DATA_API_KEY:  ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python gold_monitor.py
