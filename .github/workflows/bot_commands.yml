@@ -25,8 +25,9 @@ jobs:
 
       - name: Process bot commands
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          GIST_GITHUB_TOKEN:  ${{ secrets.GIST_GITHUB_TOKEN }}
-          GIST_ID:            ${{ secrets.GIST_ID }}
+          TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+          GIST_GITHUB_TOKEN:    ${{ secrets.GIST_GITHUB_TOKEN }}
+          GIST_ID:              ${{ secrets.GIST_ID }}
+          TWELVE_DATA_API_KEY:  ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python bot_commands.py
