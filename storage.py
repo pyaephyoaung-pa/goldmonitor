@@ -142,59 +142,143 @@ def save_day_state(state: dict):
     _write_file(DAY_STATE_FILE, state)
 
 
-# ── Buy Log / Portfolio ─────────────────────────────────────────
+# ── Buy/Sell Log & Portfolio ───────────────────────────────────
+def _get_entries() -> list:
+    """Get all buy/sell entries. Backward-compatible with old buy-only logs."""
+    entries = _read_file(BUY_LOG_FILE)
+    # Migrate old entries that lack a "type" field
+    for e in entries:
+        if "type" not in e:
+            e["type"] = "buy"
+    return entries
+
+
+def _save_entries(entries: list):
+    _write_file(BUY_LOG_FILE, entries)
+
+
 def log_buy(amount_thb: float, price_per_gram: float):
     """Log a gold purchase."""
-    buys = _read_file(BUY_LOG_FILE)
+    entries = _get_entries()
     now = datetime.now(BANGKOK_TZ)
     grams = round(amount_thb / price_per_gram, 4)
     entry = {
+        "type": "buy",
         "ts": now.isoformat(),
         "amount_thb": amount_thb,
         "price_per_gram": price_per_gram,
         "grams": grams,
     }
-    buys.append(entry)
-    _write_file(BUY_LOG_FILE, buys)
+    entries.append(entry)
+    _save_entries(entries)
     return entry
 
 
+def log_sell(amount_thb: float, price_per_gram: float):
+    """Log a gold sale. Returns entry dict or None if not enough gold."""
+    entries = _get_entries()
+    # Calculate current holdings
+    total_grams = sum(
+        e["grams"] if e["type"] == "buy" else -e["grams"]
+        for e in entries
+    )
+    grams_to_sell = round(amount_thb / price_per_gram, 4)
+    if grams_to_sell > total_grams + 0.0001:  # small tolerance
+        return None  # not enough gold
+
+    now = datetime.now(BANGKOK_TZ)
+    entry = {
+        "type": "sell",
+        "ts": now.isoformat(),
+        "amount_thb": amount_thb,
+        "price_per_gram": price_per_gram,
+        "grams": grams_to_sell,
+    }
+    entries.append(entry)
+    _save_entries(entries)
+    return entry
+
+
+def edit_entry(index: int, new_amount_thb: float) -> dict | None:
+    """Edit an entry's THB amount by 1-based index. Recalculates grams."""
+    entries = _get_entries()
+    if index < 1 or index > len(entries):
+        return None
+    e = entries[index - 1]
+    e["amount_thb"] = new_amount_thb
+    e["grams"] = round(new_amount_thb / e["price_per_gram"], 4)
+    _save_entries(entries)
+    return e
+
+
+def delete_entry(index: int) -> dict | None:
+    """Delete an entry by 1-based index. Returns the removed entry."""
+    entries = _get_entries()
+    if index < 1 or index > len(entries):
+        return None
+    removed = entries.pop(index - 1)
+    _save_entries(entries)
+    return removed
+
+
 def get_portfolio() -> dict:
-    """Calculate portfolio summary from buy log."""
-    buys = _read_file(BUY_LOG_FILE)
-    if not buys:
+    """Calculate portfolio summary from buy/sell log."""
+    entries = _get_entries()
+    if not entries:
         return {
-            "total_invested": 0,
-            "total_grams": 0,
-            "avg_cost": 0,
-            "num_buys": 0,
-            "buys": [],
+            "total_invested": 0, "total_grams": 0, "avg_cost": 0,
+            "num_buys": 0, "num_sells": 0,
+            "total_sold": 0, "realized_pnl": 0,
+            "entries": [],
         }
-    total_invested = sum(b["amount_thb"] for b in buys)
-    total_grams = sum(b["grams"] for b in buys)
-    avg_cost = round(total_invested / total_grams, 2) if total_grams > 0 else 0
+
+    buys = [e for e in entries if e["type"] == "buy"]
+    sells = [e for e in entries if e["type"] == "sell"]
+
+    total_bought_thb = sum(b["amount_thb"] for b in buys)
+    total_bought_grams = sum(b["grams"] for b in buys)
+    total_sold_thb = sum(s["amount_thb"] for s in sells)
+    total_sold_grams = sum(s["grams"] for s in sells)
+
+    net_grams = round(total_bought_grams - total_sold_grams, 4)
+    avg_buy_cost = round(total_bought_thb / total_bought_grams, 2) if total_bought_grams > 0 else 0
+
+    # Realized P&L: sell revenue minus cost basis of sold grams
+    cost_of_sold = round(total_sold_grams * avg_buy_cost, 2)
+    realized_pnl = round(total_sold_thb - cost_of_sold, 2)
+
+    # Net invested = what's still "in" the portfolio
+    net_invested = round(total_bought_thb - cost_of_sold, 2)
+
     return {
-        "total_invested": round(total_invested, 2),
-        "total_grams": round(total_grams, 4),
-        "avg_cost": avg_cost,
+        "total_invested": net_invested,
+        "total_grams": net_grams,
+        "avg_cost": avg_buy_cost,
         "num_buys": len(buys),
-        "buys": buys[-10:],  # last 10 buys
+        "num_sells": len(sells),
+        "total_bought_thb": round(total_bought_thb, 2),
+        "total_sold_thb": round(total_sold_thb, 2),
+        "realized_pnl": realized_pnl,
+        "entries": entries[-10:],
     }
 
 
 def get_portfolio_pnl(current_price: float) -> dict:
     """Calculate P&L at current market price."""
     portfolio = get_portfolio()
-    if portfolio["total_grams"] == 0:
-        return {**portfolio, "current_value": 0, "pnl_thb": 0, "pnl_pct": 0}
+    if portfolio["total_grams"] <= 0:
+        return {**portfolio, "current_value": 0, "pnl_thb": portfolio["realized_pnl"],
+                "pnl_pct": 0, "unrealized_pnl": 0}
     current_value = round(portfolio["total_grams"] * current_price, 2)
-    pnl_thb = round(current_value - portfolio["total_invested"], 2)
-    pnl_pct = round((pnl_thb / portfolio["total_invested"]) * 100, 2)
+    unrealized_pnl = round(current_value - portfolio["total_invested"], 2)
+    total_pnl = round(unrealized_pnl + portfolio["realized_pnl"], 2)
+    pnl_pct = round((total_pnl / portfolio["total_bought_thb"]) * 100, 2) if portfolio["total_bought_thb"] > 0 else 0
     return {
         **portfolio,
         "current_price": current_price,
         "current_value": current_value,
-        "pnl_thb": pnl_thb,
+        "unrealized_pnl": unrealized_pnl,
+        "pnl_thb": total_pnl,
         "pnl_pct": pnl_pct,
     }
 
