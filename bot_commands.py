@@ -500,20 +500,30 @@ def cmd_help(chat_id: str):
 
 # ── Main: Poll and Dispatch ─────────────────────────────────────
 
-COMMANDS = {
+# Public commands — anyone can use
+PUBLIC_COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
     "/predict": lambda cid, _: cmd_predict(cid),
+    "/bought": cmd_bought,
+    "/portfolio": lambda cid, _: cmd_portfolio(cid),
+    "/history": cmd_history,
+    "/setthreshold": cmd_setthreshold,
+    "/help": lambda cid, _: cmd_help(cid),
+    "/start": lambda cid, _: cmd_help(cid),
+}
+
+# Owner-only commands — require TELEGRAM_CHAT_ID
+OWNER_COMMANDS = {
     "/bought": cmd_bought,
     "/sold": cmd_sold,
     "/edit": cmd_edit,
     "/delete": cmd_delete,
     "/portfolio": lambda cid, _: cmd_portfolio(cid),
-    "/history": cmd_history,
     "/setthreshold": cmd_setthreshold,
     "/setrisethreshold": cmd_setrisethreshold,
-    "/help": lambda cid, _: cmd_help(cid),
-    "/start": lambda cid, _: cmd_help(cid),
 }
+
+COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}
 
 
 def process_commands():
@@ -532,9 +542,12 @@ def process_commands():
         text = msg.get("text", "").strip()
         chat_id = str(msg.get("chat", {}).get("id", ""))
 
-        # Only respond to authorized chat
-        if TG_CHAT_ID and chat_id != TG_CHAT_ID:
-            print(f"[bot] Ignoring message from unauthorized chat: {chat_id}")
+        # Check if command is owner-only
+        temp_cmd = text.split()[0].lower().split("@")[0] if text.startswith("/") else ""
+        is_owner = (not TG_CHAT_ID) or (chat_id == TG_CHAT_ID)
+        if temp_cmd in OWNER_COMMANDS and not is_owner:
+            print(f"[bot] Owner-only command '{temp_cmd}' from unauthorized chat: {chat_id}")
+            send_message("🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်", chat_id)
             offset = update_id + 1
             continue
 

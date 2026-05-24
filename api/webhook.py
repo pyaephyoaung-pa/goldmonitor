@@ -459,20 +459,27 @@ def cmd_help(chat_id: str):
     )
 
 
-COMMANDS = {
+# Public commands — anyone can use
+PUBLIC_COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
     "/predict": lambda cid, _: cmd_predict(cid),
+    "/history": cmd_history,
+    "/help": lambda cid, _: cmd_help(cid),
+    "/start": lambda cid, _: cmd_help(cid),
+}
+
+# Owner-only commands — require TELEGRAM_CHAT_ID
+OWNER_COMMANDS = {
     "/bought": cmd_bought,
     "/sold": cmd_sold,
     "/edit": cmd_edit,
     "/delete": cmd_delete,
     "/portfolio": lambda cid, _: cmd_portfolio(cid),
-    "/history": cmd_history,
     "/setthreshold": cmd_setthreshold,
     "/setrisethreshold": cmd_setrisethreshold,
-    "/help": lambda cid, _: cmd_help(cid),
-    "/start": lambda cid, _: cmd_help(cid),
 }
+
+COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}
 
 
 # ── Vercel Handler ─────────────────────────────────────────────
@@ -512,10 +519,8 @@ class handler(BaseHTTPRequestHandler):
         if not text or not chat_id:
             return
 
-        # Only respond to authorized chat
-        if TG_CHAT_ID and chat_id != TG_CHAT_ID:
-            print(f"[webhook] Ignoring unauthorized chat: {chat_id}")
-            return
+        # Check owner status for owner-only commands
+        is_owner = (not TG_CHAT_ID) or (chat_id == TG_CHAT_ID)
 
         if not text.startswith("/"):
             return
@@ -542,6 +547,11 @@ class handler(BaseHTTPRequestHandler):
         print(f"[webhook] Command: {cmd} args='{args}' chat={chat_id}")
 
         if cmd_handler:
+            # Block owner-only commands from non-owners
+            if cmd in OWNER_COMMANDS and not is_owner:
+                print(f"[webhook] Owner-only command '{cmd}' from unauthorized chat: {chat_id}")
+                send_message("🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်", chat_id)
+                return
             try:
                 cmd_handler(chat_id, args)
             except Exception as e:
