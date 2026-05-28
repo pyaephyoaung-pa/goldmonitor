@@ -10,6 +10,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 - 🔮 **Price Prediction** — RSI, MACD, Bollinger + ML model ဖြင့် 4h/12h/24h ခန့်မှန်း
 - 📊 **Portfolio Tracking** — ဝယ်ယူမှု မှတ်တမ်း + P&L tracking
 - 🤖 **Interactive Bot** — Telegram commands (/price, /predict, /bought, /portfolio)
+- 🌐 **Public Bot** — ဘယ်သူမဆို ဈေးကြည့်နိုင်၊ subscribe လုပ်နိုင်
 - 📈 **Multi-timeframe Signals** — 1h, 4h, 24h, 7d trends ကို ယှဉ်ကြည့်
 - 🌙 **Rich Evening Summary** — trends, portfolio P&L, prediction outlook
 - 💾 **Persistent Storage** — GitHub Gist ဖြင့် data ကို store
@@ -18,17 +19,30 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 
 ## 📲 Telegram Commands
 
+### 🌐 Public Commands (ဘယ်သူမဆို သုံးနိုင်)
+
 | Command | Description |
 |---|---|
 | `/price` | 💰 လက်ရှိ ရွှေဈေး + quick TA |
 | `/predict` | 🔮 4h/12h/24h ခန့်မှန်းချက် |
-| `/bought <THB>` | 📝 ဝယ်ယူမှု မှတ်ပါ (e.g. `/bought 5000`) |
-| `/portfolio` | 📊 Portfolio P&L |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
-| `/setthreshold N` | ⚙️ Alert % ပြောင်းပါ |
+| `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
+| `/unsubscribe` | 🔕 Alerts ရပ်ပါ |
 | `/help` | ❓ Commands အားလုံး |
 
-Commands are checked every **5 minutes** via GitHub Actions.
+### 🔒 Owner-Only Commands (bot owner သီးသန့်)
+
+| Command | Description |
+|---|---|
+| `/bought <THB>` | 📝 ဝယ်ယူမှု မှတ်ပါ (e.g. `/bought 5000`) |
+| `/sold <THB>` | 📝 ရောင်းချမှု မှတ်ပါ |
+| `/edit <#> <THB>` | ✏️ Entry ပြင်ဆင်ပါ |
+| `/delete <#>` | 🗑 Entry ဖျက်ပါ |
+| `/portfolio` | 📊 Portfolio P&L |
+| `/setthreshold N` | ⚙️ Drop alert % ပြောင်းပါ |
+| `/setrisethreshold N` | 📈 Rise alert % ပြောင်းပါ |
+
+Commands are checked every **5 minutes** via GitHub Actions + **instant via webhook**.
 
 ---
 
@@ -40,6 +54,8 @@ Commands are checked every **5 minutes** via GitHub Actions.
 | ဈေး drop ≥ threshold | 🟡 ဝယ်သင့်တဲ့ alert + RSI |
 | ဈေး drop ≥ 1.5× threshold | 🔴 ကြီးစွာ ကျဆင်း alert |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
+
+> 📢 Alerts များကို owner နှင့် `/subscribe` လုပ်ထားသော users အားလုံးကို ပို့ပါသည်
 
 ---
 
@@ -109,11 +125,15 @@ goldmonitor/
 ├── gold_monitor.py          # Main hourly monitor
 ├── predictor.py             # TA indicators + ML prediction
 ├── storage.py               # GitHub Gist persistent storage
-├── bot_commands.py           # Telegram command handler
+├── bot_commands.py          # Telegram command handler (polling)
+├── api/
+│   └── webhook.py           # Vercel webhook handler (instant replies)
 ├── setup_gist.py            # One-time Gist setup script
+├── setup_webhook.py         # Webhook setup script
+├── vercel.json              # Vercel deployment config
 ├── requirements.txt         # Python dependencies
 ├── .github/workflows/
-│   ├── gold_monitor.yml     # Hourly price check
+│   ├── gold_monitor.yml     # 8-min price check
 │   └── bot_commands.yml     # 5-min command polling
 └── README.md
 ```
