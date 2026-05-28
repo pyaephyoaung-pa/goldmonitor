@@ -249,84 +249,72 @@ def main():
     ta = predictor.analyze(history) if len(history) >= 14 else {}
     trend = predictor.get_trend_summary(history) if len(history) >= 2 else {}
 
-    # ── Buy Alert (intraday drop) ───────────────────────────────
-    if d >= DROP_THRESHOLD and not state["notified_buy"]:
-        ta_signal = f"\n🎯 TA Signal: {ta['overall_signal']}" if ta.get("overall_signal") else ""
-        rsi_line = f"\n📊 RSI: {ta['rsi']}" if ta.get("rsi") else ""
+    # ── Drop Alerts (5 levels, equal spacing) ─────────────────────
+    DROP_LEVELS = [
+        {"mult": 1, "key": "notified_drop_1", "emoji": "🟡", "title": "ရွှေဈေး ကျဆင်း", "advice": "👉 YLG Get Gold ဖွင့်ဝယ်ပါ!"},
+        {"mult": 2, "key": "notified_drop_2", "emoji": "🟠", "title": "ရွှေဈေး ဆက်ကျဆင်း", "advice": "💡 DCA ဝယ်ရန် စဉ်းစားပါ!"},
+        {"mult": 3, "key": "notified_drop_3", "emoji": "🔴", "title": "ရွှေဈေး ကြီးစွာ ကျဆင်း", "advice": "🔥 DCA ထပ်ဝယ်ရန် အခွင့်ကောင်း!"},
+        {"mult": 4, "key": "notified_drop_4", "emoji": "🔴🔴", "title": "ရွှေဈေး ပြင်းထန်စွာ ကျ", "advice": "⚠️ သတိထားပြီး DCA စဉ်းစားပါ!"},
+        {"mult": 5, "key": "notified_drop_5", "emoji": "🚨", "title": "ရွှေဈေး အကြီးအကျယ် ကျဆင်း", "advice": "🏦 အရေးပေါ် — portfolio စစ်ဆေးပါ!"},
+    ]
 
-        notify(
-            f"🟡 <b>ရွှေဝယ်သင့်တဲ့ အချိန်!</b>\n"
-            f"⏰ {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-            f"📈 Open    : {fmt(state['open_price'])}/g\n"
-            f"📉 ကျဆင်းမှု : {d:.2f}%\n"
-            f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g"
-            f"{ta_signal}{rsi_line}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"👉 YLG Get Gold ဖွင့်ဝယ်ပါ!\n"
-            f"📝 ဝယ်ပြီးရင် /bought &lt;THB&gt; ပို့ပါ"
-        )
-        state["notified_buy"] = True
+    ta_signal = f"\n🎯 TA Signal: {ta['overall_signal']}" if ta.get("overall_signal") else ""
+    rsi_line = f"\n📊 RSI: {ta['rsi']}" if ta.get("rsi") else ""
 
-    # ── Strong Drop Alert ───────────────────────────────────────
-    if d >= DROP_THRESHOLD * 1.5 and not state["notified_strong"]:
-        notify(
-            f"🔴 <b>ရွှေဈေး ကြီးစွာ ကျဆင်း!</b>\n"
-            f"⏰ {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-            f"📉 ကျဆင်းမှု : {d:.2f}%\n"
-            f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🔥 DCA ထပ်ဝယ်ရန် စဉ်းစားပါ!\n"
-            f"📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"
-        )
-        state["notified_strong"] = True
+    for level in DROP_LEVELS:
+        threshold = DROP_THRESHOLD * level["mult"]
+        if d >= threshold and not state.get(level["key"]):
+            notify(
+                f"{level['emoji']} <b>{level['title']}!</b>\n"
+                f"⏰ {time_str}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
+                f"📈 Open    : {fmt(state['open_price'])}/g\n"
+                f"📉 ကျဆင်းမှု : {d:.2f}% (Level {level['mult']})\n"
+                f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g"
+                f"{ta_signal}{rsi_line}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"{level['advice']}\n"
+                f"📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"
+            )
+            state[level["key"]] = True
 
     # Reset drop notifications if price recovers
     if d < DROP_THRESHOLD * 0.3:
-        state["notified_buy"] = False
-        state["notified_strong"] = False
+        for level in DROP_LEVELS:
+            state[level["key"]] = False
 
-    # ── Rise Alert (intraday rise) ─────────────────────────────
+    # ── Rise Alerts (5 levels, equal spacing) ──────────────────
+    RISE_LEVELS = [
+        {"mult": 1, "key": "notified_rise_1", "emoji": "🟢", "title": "ရွှေဈေး တက်နေပါတယ်", "advice": "💎 Portfolio တန်ဖိုး တက်နေပါပြီ!"},
+        {"mult": 2, "key": "notified_rise_2", "emoji": "🟢🟢", "title": "ရွှေဈေး ဆက်တက်နေတယ်", "advice": "📊 Profit ယူရန် စဉ်းစားပါ!"},
+        {"mult": 3, "key": "notified_rise_3", "emoji": "🟣", "title": "ရွှေဈေး ကြီးစွာ တက်", "advice": "💰 Partial profit ယူရန် စဉ်းစားပါ!"},
+        {"mult": 4, "key": "notified_rise_4", "emoji": "🟣🟣", "title": "ရွှေဈေး ပြင်းထန်စွာ တက်", "advice": "⚡ ဈေးမြင့်ချိန် — profit ယူပါ!"},
+        {"mult": 5, "key": "notified_rise_5", "emoji": "🚀", "title": "ရွှေဈေး အကြီးအကျယ် တက်", "advice": "🏆 အမြတ်ကြီး — sell စဉ်းစားပါ!"},
+    ]
+
     r = rise_pct(state["open_price"], thb_gram)
-    if r >= RISE_THRESHOLD and not state.get("notified_rise"):
-        ta_signal = f"\n🎯 TA Signal: {ta['overall_signal']}" if ta.get("overall_signal") else ""
-        rsi_line = f"\n📊 RSI: {ta['rsi']}" if ta.get("rsi") else ""
-
-        notify(
-            f"🟢 <b>ရွှေဈေး တက်နေပါတယ်!</b>\n"
-            f"⏰ {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-            f"📈 Open    : {fmt(state['open_price'])}/g\n"
-            f"🚀 တက်မှု   : +{r:.2f}%\n"
-            f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g"
-            f"{ta_signal}{rsi_line}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💎 Portfolio တန်ဖိုး တက်နေပါပြီ!"
-        )
-        state["notified_rise"] = True
-
-    # ── Strong Rise Alert ──────────────────────────────────────
-    if r >= RISE_THRESHOLD * 1.5 and not state.get("notified_strong_rise"):
-        notify(
-            f"🟣 <b>ရွှေဈေး ကြီးစွာ တက်!</b>\n"
-            f"⏰ {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-            f"🚀 တက်မှု   : +{r:.2f}%\n"
-            f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"📊 Profit ယူရန် စဉ်းစားပါ!"
-        )
-        state["notified_strong_rise"] = True
+    for level in RISE_LEVELS:
+        threshold = RISE_THRESHOLD * level["mult"]
+        if r >= threshold and not state.get(level["key"]):
+            notify(
+                f"{level['emoji']} <b>{level['title']}!</b>\n"
+                f"⏰ {time_str}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
+                f"📈 Open    : {fmt(state['open_price'])}/g\n"
+                f"🚀 တက်မှု   : +{r:.2f}% (Level {level['mult']})\n"
+                f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g"
+                f"{ta_signal}{rsi_line}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"{level['advice']}"
+            )
+            state[level["key"]] = True
 
     # Reset rise notifications if price drops back
     if r < RISE_THRESHOLD * 0.3:
-        state["notified_rise"] = False
-        state["notified_strong_rise"] = False
+        for level in RISE_LEVELS:
+            state[level["key"]] = False
 
     # ── Evening Summary (8–9pm BKK) ────────────────────────────
     if 20 <= hour <= 21 and not state["evening_sent"]:

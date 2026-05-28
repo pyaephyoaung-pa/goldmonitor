@@ -51,11 +51,30 @@ Commands are checked every **5 minutes** via GitHub Actions + **instant via webh
 | အချိန် | Message |
 |---|---|
 | မနက် (first run) | 🌅 Open ဈေး + trend + TA signal |
-| ဈေး drop ≥ threshold | 🟡 ဝယ်သင့်တဲ့ alert + RSI |
-| ဈေး drop ≥ 1.5× threshold | 🔴 ကြီးစွာ ကျဆင်း alert |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 
+**Drop Alerts (5 levels, threshold = 0.5% default):**
+
+| Level | Trigger | Alert |
+|---|---|---|
+| 1 | ≥ 1× (0.5%) | 🟡 ရွှေဈေး ကျဆင်း |
+| 2 | ≥ 2× (1.0%) | 🟠 ဆက်ကျဆင်း |
+| 3 | ≥ 3× (1.5%) | 🔴 ကြီးစွာ ကျဆင်း |
+| 4 | ≥ 4× (2.0%) | 🔴🔴 ပြင်းထန်စွာ ကျ |
+| 5 | ≥ 5× (2.5%) | 🚨 အကြီးအကျယ် ကျဆင်း |
+
+**Rise Alerts (5 levels, threshold = 0.5% default):**
+
+| Level | Trigger | Alert |
+|---|---|---|
+| 1 | ≥ 1× (0.5%) | 🟢 ရွှေဈေး တက်နေတယ် |
+| 2 | ≥ 2× (1.0%) | 🟢🟢 ဆက်တက်နေတယ် |
+| 3 | ≥ 3× (1.5%) | 🟣 ကြီးစွာ တက် |
+| 4 | ≥ 4× (2.0%) | 🟣🟣 ပြင်းထန်စွာ တက် |
+| 5 | ≥ 5× (2.5%) | 🚀 အကြီးအကျယ် တက် |
+
 > 📢 Alerts များကို owner နှင့် `/subscribe` လုပ်ထားသော users အားလုံးကို ပို့ပါသည်
+> 🔄 ဈေးပြန်တက်/ကျပြီး reset ဖြစ်မှ alerts ထပ်ပို့ | နေ့သစ်တိုင်း auto reset
 
 ---
 
