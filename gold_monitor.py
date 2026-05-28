@@ -97,20 +97,43 @@ def get_gold_price(retries: int = 2) -> tuple:
 
 # ── Telegram Notify ─────────────────────────────────────────────
 
-def notify(msg: str):
-    if not TG_BOT_TOKEN or not TG_CHAT_ID:
-        print("[WARN] Telegram credentials not set")
-        print(msg)
-        return
+def _send_to(chat_id: str, msg: str):
+    """Send a message to a single chat ID."""
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TG_CHAT_ID, "text": msg, "parse_mode": "HTML"},
+            json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
-        print(f"[Telegram] status={r.status_code}")
+        resp = r.json()
+        if resp.get("ok"):
+            print(f"[Telegram] Sent to {chat_id}: OK")
+        else:
+            print(f"[Telegram] Failed for {chat_id}: {resp.get('description', 'unknown')}")
+            # If bot was blocked by user, auto-remove from subscribers
+            if resp.get("error_code") == 403:
+                print(f"[Telegram] Removing blocked subscriber: {chat_id}")
+                storage.remove_subscriber(chat_id)
     except Exception as e:
-        print(f"[Telegram] error: {e}")
+        print(f"[Telegram] Send error for {chat_id}: {e}")
+
+
+def notify(msg: str):
+    """Send message to owner + all subscribers."""
+    if not TG_BOT_TOKEN:
+        print("[WARN] Telegram bot token not set")
+        print(msg)
+        return
+
+    # Send to owner
+    if TG_CHAT_ID:
+        _send_to(TG_CHAT_ID, msg)
+
+    # Send to all subscribers
+    subscribers = storage.get_subscribers()
+    for sub_id in subscribers:
+        if sub_id != TG_CHAT_ID:  # avoid duplicate if owner subscribed
+            _send_to(sub_id, msg)
 
 
 # ── Helpers ─────────────────────────────────────────────────────

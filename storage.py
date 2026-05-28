@@ -19,6 +19,7 @@ BUY_LOG_FILE = "buy_log.json"
 DAY_STATE_FILE = "day_state.json"
 BOT_STATE_FILE = "bot_state.json"
 MODEL_DATA_FILE = "model_data.json"
+SUBSCRIBERS_FILE = "subscribers.json"
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
@@ -300,6 +301,35 @@ def load_model_data() -> dict:
 
 def save_model_data(data: dict):
     _write_file(MODEL_DATA_FILE, data)
+
+
+# ── Subscribers ────────────────────────────────────────────────
+def get_subscribers() -> list:
+    """Get list of subscriber chat IDs."""
+    data = _read_file(SUBSCRIBERS_FILE)
+    if isinstance(data, list):
+        return data
+    return data.get("chat_ids", [])
+
+
+def add_subscriber(chat_id: str) -> bool:
+    """Add a subscriber. Returns True if newly added, False if already exists."""
+    subs = get_subscribers()
+    if chat_id in subs:
+        return False
+    subs.append(chat_id)
+    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs})
+    return True
+
+
+def remove_subscriber(chat_id: str) -> bool:
+    """Remove a subscriber. Returns True if removed, False if not found."""
+    subs = get_subscribers()
+    if chat_id not in subs:
+        return False
+    subs.remove(chat_id)
+    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs})
+    return True
 
 
 # ── Utility: create Gist if not exists ──────────────────────────

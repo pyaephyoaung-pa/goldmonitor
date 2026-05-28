@@ -476,6 +476,39 @@ def cmd_setrisethreshold(chat_id: str, args: str):
     )
 
 
+def cmd_subscribe(chat_id: str):
+    """Subscribe to daily gold price alerts."""
+    # Owner is always subscribed, no need to subscribe
+    if TG_CHAT_ID and chat_id == TG_CHAT_ID:
+        send_message("✅ သင်က bot owner ဖြစ်ပါတယ် — အမြဲတမ်း alerts ရရှိပါတယ်", chat_id)
+        return
+    added = storage.add_subscriber(chat_id)
+    if added:
+        send_message(
+            "✅ <b>Subscribe လုပ်ပြီးပါပြီ!</b>\n"
+            "🌅 မနက်ခင်း ရွှေဈေး\n"
+            "🌙 ညနေ အနှစ်ချုပ်\n"
+            "📊 ဈေးနှုန်း alerts\n"
+            "━━━━━━━━━━━━━━━\n"
+            "ရပ်ချင်ရင် /unsubscribe ရိုက်ပါ",
+            chat_id,
+        )
+    else:
+        send_message("ℹ️ Subscribe ဖြစ်ပြီးသားပါ — /unsubscribe နဲ့ ရပ်နိုင်ပါတယ်", chat_id)
+
+
+def cmd_unsubscribe(chat_id: str):
+    """Unsubscribe from daily gold price alerts."""
+    if TG_CHAT_ID and chat_id == TG_CHAT_ID:
+        send_message("ℹ️ သင်က bot owner ဖြစ်ပါတယ် — unsubscribe လုပ်လို့မရပါ", chat_id)
+        return
+    removed = storage.remove_subscriber(chat_id)
+    if removed:
+        send_message("👋 Unsubscribe လုပ်ပြီးပါပြီ — alerts ပို့တော့မှာ မဟုတ်ပါ", chat_id)
+    else:
+        send_message("ℹ️ Subscribe မလုပ်ရသေးပါ — /subscribe နဲ့ စတင်ပါ", chat_id)
+
+
 def cmd_help(chat_id: str):
     """Show available commands."""
     send_message(
@@ -491,6 +524,8 @@ def cmd_help(chat_id: str):
         "📈 /history [N] — N-day ဈေးသမိုင်း\n"
         "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
         "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
+        "🔔 /subscribe — ဈေးနှုန်း alerts ရယူပါ\n"
+        "🔕 /unsubscribe — alerts ရပ်ပါ\n"
         "❓ /help — ဤ menu\n"
         "━━━━━━━━━━━━━━━\n"
         "⚡ Instant replies via webhook",
@@ -504,10 +539,9 @@ def cmd_help(chat_id: str):
 PUBLIC_COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
     "/predict": lambda cid, _: cmd_predict(cid),
-    "/bought": cmd_bought,
-    "/portfolio": lambda cid, _: cmd_portfolio(cid),
     "/history": cmd_history,
-    "/setthreshold": cmd_setthreshold,
+    "/subscribe": lambda cid, _: cmd_subscribe(cid),
+    "/unsubscribe": lambda cid, _: cmd_unsubscribe(cid),
     "/help": lambda cid, _: cmd_help(cid),
     "/start": lambda cid, _: cmd_help(cid),
 }
