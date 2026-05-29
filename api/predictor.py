@@ -389,21 +389,28 @@ def predict(history: list, model_data: dict) -> dict:
     result["technical_analysis"] = ta
 
     # Technical-only prediction (always available)
+    # buy_score > 0 = oversold/dipping = BUY opportunity
+    # buy_score < 0 = overbought/rising = WAIT
     score = ta.get("buy_score", 0)
-    if score > 0.5:
-        result["ta_outlook"] = "PRICE LIKELY TO DIP — good buy window"
-    elif score > 0:
-        result["ta_outlook"] = "SLIGHT BEARISH lean — may dip"
-    elif score > -0.5:
-        result["ta_outlook"] = "NEUTRAL — no clear direction"
+    if score > 1:
+        result["ta_outlook"] = "🟢 STRONG BUY — ဈေး oversold ဖြစ်နေ၊ ဝယ်ရန် အကောင်းဆုံးအချိန်"
+    elif score > 0.3:
+        result["ta_outlook"] = "🟡 BUY — ဈေးကျနေ၊ ဝယ်ရန် စဉ်းစားပါ"
+    elif score > -0.3:
+        result["ta_outlook"] = "⚪ HOLD — ဈေးတည်ငြိမ်နေ၊ စောင့်ကြည့်ပါ"
+    elif score > -1:
+        result["ta_outlook"] = "🟠 WAIT — ဈေးတက်နေ၊ ဝယ်ဖို့ မသင့်သေး"
     else:
-        result["ta_outlook"] = "BULLISH — price likely rising"
+        result["ta_outlook"] = "🔴 OVERBOUGHT — ဈေးအလွန်မြင့်နေ၊ မဝယ်သင့်"
 
     # ML predictions (if models exist)
     models_dict = model_data.get("models", {})
     if not models_dict or len(history) < 27:
         result["ml_available"] = False
-        result["ml_note"] = f"Need 100+ data points to train. Have {len(history)}."
+        if len(history) >= 100:
+            result["ml_note"] = f"Data {len(history)} ခု ရှိပြီ — 3am BKK တွင် auto-train ဖြစ်ပါမည်"
+        else:
+            result["ml_note"] = f"Data {len(history)}/100 — {100 - len(history)} ခု ထပ်လိုပါသေးသည်"
         return result
 
     try:
@@ -534,33 +541,96 @@ def format_prediction_message(prediction: dict) -> str:
     lines = ["🔮 <b>ရွှေဈေး ခန့်မှန်းချက်</b>", "━━━━━━━━━━━━━━━"]
 
     ta = prediction.get("technical_analysis", {})
-    if ta.get("rsi"):
-        lines.append(f"📊 RSI: {ta['rsi']} ({ta.get('rsi_signal', '')})")
-    if ta.get("overall_signal"):
-        lines.append(f"📈 Technical: {ta['overall_signal']} (score: {ta.get('buy_score', '?')})")
-    if ta.get("ma_signal"):
-        lines.append(f"📉 MA Trend: {ta['ma_signal']}")
 
+    # Current price context
+    if ta.get("current_price"):
+        lines.append(f"💰 လက်ရှိဈေး: ฿{ta['current_price']:,.0f}/g")
+
+    # RSI with visual bar
+    if ta.get("rsi") is not None:
+        rsi = ta["rsi"]
+        if rsi < 30:
+            rsi_bar = "▓░░░░ Oversold"
+        elif rsi < 40:
+            rsi_bar = "▓▓░░░ Low"
+        elif rsi < 60:
+            rsi_bar = "▓▓▓░░ Neutral"
+        elif rsi < 70:
+            rsi_bar = "▓▓▓▓░ High"
+        else:
+            rsi_bar = "▓▓▓▓▓ Overbought"
+        lines.append(f"📊 RSI: {rsi} [{rsi_bar}]")
+
+    lines.append("━━━━━━━━━━━━━━━")
+
+    # Moving Averages
+    if ta.get("sma5") and ta.get("sma20"):
+        cross_pct = ta.get("ma_crossover_pct", 0)
+        if cross_pct > 0:
+            lines.append(f"📈 SMA5 > SMA20: +{cross_pct}% (Bullish)")
+        else:
+            lines.append(f"📉 SMA5 < SMA20: {cross_pct}% (Bearish)")
+
+    # MACD
+    if ta.get("macd"):
+        macd = ta["macd"]
+        hist_arrow = "📈" if macd["histogram"] > 0 else "📉"
+        lines.append(f"{hist_arrow} MACD: {macd['macd']} | Signal: {macd['signal']} | Hist: {macd['histogram']}")
+
+    # Bollinger Bands
+    if ta.get("bollinger"):
+        bb = ta["bollinger"]
+        lines.append(
+            f"📏 Bollinger: ↑{bb['upper']:,.0f} ─{bb['middle']:,.0f}─ ↓{bb['lower']:,.0f} "
+            f"(Position: {bb['position']}%)"
+        )
+
+    # Momentum & Volatility
+    parts = []
+    if ta.get("momentum") is not None:
+        parts.append(f"Momentum: {ta['momentum']:+.3f}%")
+    if ta.get("volatility") is not None:
+        parts.append(f"Vol: {ta['volatility']:.4f}%")
+    if parts:
+        lines.append(f"⚡ {' | '.join(parts)}")
+
+    # Support / Resistance
+    sr = ta.get("support_resistance")
+    if sr:
+        lines.append(
+            f"🔻 Support: ฿{sr['support_1']:,.0f} / ฿{sr['support_2']:,.0f}\n"
+            f"🔺 Resistance: ฿{sr['resistance_1']:,.0f} / ฿{sr['resistance_2']:,.0f}"
+        )
+
+    # Overall TA signal
+    lines.append("━━━━━━━━━━━━━━━")
+    if ta.get("overall_signal"):
+        lines.append(f"🎯 Technical Signal: <b>{ta['overall_signal']}</b> (score: {ta.get('buy_score', '?')})")
+
+    # ML Predictions
     if prediction.get("predictions"):
         lines.append("")
         lines.append("🤖 <b>ML Predictions:</b>")
-        for horizon, pred in prediction["predictions"].items():
+        for horizon, pred in sorted(prediction["predictions"].items()):
             if "direction" in pred:
                 arrow = "🟢" if pred["direction"] == "UP" else "🔴"
+                conf_bar = "▓" * int(pred["confidence"] / 20) + "░" * (5 - int(pred["confidence"] / 20))
                 lines.append(
-                    f"  {arrow} {horizon}: {pred['direction']} "
-                    f"({pred['confidence']}% confidence)"
+                    f"  {arrow} {horizon}: <b>{pred['direction']}</b> "
+                    f"[{conf_bar}] {pred['confidence']}%"
                 )
             elif "error" in pred:
                 lines.append(f"  ⚠️ {horizon}: {pred['error']}")
 
+    # Final Outlook
+    lines.append("━━━━━━━━━━━━━━━")
     if prediction.get("combined_outlook"):
-        lines.append(f"\n💡 {prediction['combined_outlook']}")
-    elif prediction.get("ta_outlook"):
-        lines.append(f"\n💡 {prediction['ta_outlook']}")
+        lines.append(f"💡 <b>{prediction['combined_outlook']}</b>")
+    if prediction.get("ta_outlook"):
+        lines.append(f"📋 {prediction['ta_outlook']}")
 
     if not prediction.get("ml_available"):
         note = prediction.get("ml_note", "")
-        lines.append(f"\nℹ️ ML model: {note}")
+        lines.append(f"ℹ️ ML: {note}")
 
     return "\n".join(lines)
