@@ -388,6 +388,10 @@ def predict(history: list, model_data: dict) -> dict:
     ta = analyze(history)
     result["technical_analysis"] = ta
 
+    # Include USD price from latest history entry
+    if history:
+        result["usd_oz"] = history[-1].get("usd_oz")
+
     # Technical-only prediction (always available)
     # buy_score > 0 = oversold/dipping = BUY opportunity
     # buy_score < 0 = overbought/rising = WAIT
@@ -544,7 +548,8 @@ def format_prediction_message(prediction: dict) -> str:
 
     # Current price context
     if ta.get("current_price"):
-        lines.append(f"💰 လက်ရှိဈေး: ฿{ta['current_price']:,.0f}/g")
+        usd_line = f" | ${prediction['usd_oz']}/oz" if prediction.get("usd_oz") else ""
+        lines.append(f"💰 လက်ရှိဈေး: ฿{ta['current_price']:,.0f}/g{usd_line}")
 
     # RSI with visual bar
     if ta.get("rsi") is not None:
