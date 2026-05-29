@@ -3,7 +3,8 @@ name: Gold Price Monitor
 on:
   schedule:
     - cron: "*/8 1-17 * * 1-5"  # Mon-Fri: every 8min, 8am-midnight BKK (UTC+7)
-    - cron: "*/8 3-10 * * 6"   # Sat: every 8min, Asia session
+    - cron: "*/8 1-17 * * 6"   # Sat: every 8min, 8am-midnight BKK
+    - cron: "*/8 12-15 * * 0"  # Sun: every 8min, 7-10pm BKK (evening summary only)
   workflow_dispatch:
 
 permissions:

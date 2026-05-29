@@ -190,7 +190,7 @@ def main():
     # ── Day State ───────────────────────────────────────────────
     state = storage.load_day_state()
 
-    # First run of the day — morning message
+    # First run of the day — set open price
     if state["open_price"] is None:
         state.update({
             "open_price": thb_gram,
@@ -199,45 +199,49 @@ def main():
         })
         storage.save_day_state(state)
 
-        # Include trend if we have history
-        trend_lines = ""
-        if len(history) >= 24:
-            trend = predictor.get_trend_summary(history)
-            parts = []
-            if "change_24h" in trend:
-                parts.append(f"24h: {trend['change_24h']:+.3f}%")
-            if "change_7d" in trend:
-                parts.append(f"7d: {trend['change_7d']:+.3f}%")
-            if parts:
-                trend_lines = f"\n📊 Trend: {' | '.join(parts)}"
+        # Only send morning message during morning hours (6am-12pm BKK)
+        if 6 <= hour <= 12:
+            # Include trend if we have history
+            trend_lines = ""
+            if len(history) >= 24:
+                trend = predictor.get_trend_summary(history)
+                parts = []
+                if "change_24h" in trend:
+                    parts.append(f"24h: {trend['change_24h']:+.3f}%")
+                if "change_7d" in trend:
+                    parts.append(f"7d: {trend['change_7d']:+.3f}%")
+                if parts:
+                    trend_lines = f"\n📊 Trend: {' | '.join(parts)}"
 
-        # Quick TA signal
-        ta_line = ""
-        if len(history) >= 14:
-            ta = predictor.analyze(history)
-            if ta.get("overall_signal"):
-                ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
+            # Quick TA signal
+            ta_line = ""
+            if len(history) >= 14:
+                ta = predictor.analyze(history)
+                if ta.get("overall_signal"):
+                    ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
 
-        gb = gold_breakdown(thb_gram)
-        notify(
-            f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
-            f"📅 {time_str} (BKK)\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🥇 <b>99.99% (Pure)</b>\n"
-            f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
-            f"  1g: {fmt(gb['gram_9999'])}\n"
-            f"🥈 <b>96.50%</b>\n"
-            f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
-            f"  1g: {fmt(gb['gram_9650'])}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🌐 Spot     : ${usd_oz}/oz\n"
-            f"💱 Rate     : 1 USD = {thb_rate} THB\n"
-            f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
-            f"{trend_lines}{ta_line}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"✅ Monitoring စပြီ!"
-        )
-        return
+            gb = gold_breakdown(thb_gram)
+            notify(
+                f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
+                f"📅 {time_str} (BKK)\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🥇 <b>99.99% (Pure)</b>\n"
+                f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
+                f"  1g: {fmt(gb['gram_9999'])}\n"
+                f"🥈 <b>96.50%</b>\n"
+                f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
+                f"  1g: {fmt(gb['gram_9650'])}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🌐 Spot     : ${usd_oz}/oz\n"
+                f"💱 Rate     : 1 USD = {thb_rate} THB\n"
+                f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
+                f"{trend_lines}{ta_line}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"✅ Monitoring စပြီ!"
+            )
+            return
+        # If first run is not morning (e.g. Sunday evening), skip morning msg
+        # but continue to check evening summary below
 
     # ── Update Day Stats ────────────────────────────────────────
     state["day_low"] = min(state["day_low"], thb_gram)
@@ -318,8 +322,8 @@ def main():
         for level in RISE_LEVELS:
             state[level["key"]] = False
 
-    # ── Evening Summary (8–9pm BKK) ────────────────────────────
-    if 20 <= hour <= 21 and not state["evening_sent"]:
+    # ── Evening Summary (7–10pm BKK, wider window for GitHub Actions delay)
+    if 19 <= hour <= 22 and not state["evening_sent"]:
         change = -d
         arrow = "📈" if change > 0 else "📉"
 
