@@ -542,7 +542,7 @@ def get_trend_summary(history: list) -> dict:
 
 def format_prediction_message(prediction: dict) -> str:
     """Format prediction results into a Telegram-friendly message."""
-    lines = ["🔮 <b>ရွှေဈေး ခန့်မှန်းချက်</b>", "━━━━━━━━━━━━━━━"]
+    lines = ["🔮 ရွှေဈေး ခန့်မှန်းချက်", "━━━━━━━━━━━━━━━"]
 
     ta = prediction.get("technical_analysis", {})
 
@@ -610,18 +610,18 @@ def format_prediction_message(prediction: dict) -> str:
     # Overall TA signal
     lines.append("━━━━━━━━━━━━━━━")
     if ta.get("overall_signal"):
-        lines.append(f"🎯 Technical Signal: <b>{ta['overall_signal']}</b> (score: {ta.get('buy_score', '?')})")
+        lines.append(f"🎯 Technical Signal: {ta['overall_signal']} (score: {ta.get('buy_score', '?')})")
 
     # ML Predictions
     if prediction.get("predictions"):
         lines.append("")
-        lines.append("🤖 <b>ML Predictions:</b>")
+        lines.append("🤖 ML Predictions:")
         for horizon, pred in sorted(prediction["predictions"].items()):
             if "direction" in pred:
                 arrow = "🟢" if pred["direction"] == "UP" else "🔴"
                 conf_bar = "▓" * int(pred["confidence"] / 20) + "░" * (5 - int(pred["confidence"] / 20))
                 lines.append(
-                    f"  {arrow} {horizon}: <b>{pred['direction']}</b> "
+                    f"  {arrow} {horizon}: {pred['direction']} "
                     f"[{conf_bar}] {pred['confidence']}%"
                 )
             elif "error" in pred:
@@ -630,7 +630,7 @@ def format_prediction_message(prediction: dict) -> str:
     # Final Outlook
     lines.append("━━━━━━━━━━━━━━━")
     if prediction.get("combined_outlook"):
-        lines.append(f"💡 <b>{prediction['combined_outlook']}</b>")
+        lines.append(f"💡 {prediction['combined_outlook']}")
     if prediction.get("ta_outlook"):
         lines.append(f"📋 {prediction['ta_outlook']}")
 
