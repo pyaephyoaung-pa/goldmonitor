@@ -199,8 +199,9 @@ def main():
         })
         storage.save_day_state(state)
 
-        # Only send morning message during morning hours (6am-12pm BKK)
-        if 6 <= hour <= 12:
+        # Send morning message during reasonable hours (6am-2pm BKK)
+        # Wider window because GitHub Actions can delay 30+ minutes
+        if 6 <= hour <= 14:
             # Include trend if we have history
             trend_lines = ""
             if len(history) >= 24:
@@ -239,7 +240,7 @@ def main():
                 f"━━━━━━━━━━━━━━━\n"
                 f"✅ Monitoring စပြီ!"
             )
-            return
+            # Don't return — continue to check evening summary and alerts below
         # If first run is not morning (e.g. Sunday evening), skip morning msg
         # but continue to check evening summary below
 
@@ -322,8 +323,8 @@ def main():
         for level in RISE_LEVELS:
             state[level["key"]] = False
 
-    # ── Evening Summary (7–10pm BKK, wider window for GitHub Actions delay)
-    if 19 <= hour <= 22 and not state["evening_sent"]:
+    # ── Evening Summary (5pm–midnight BKK, very wide window for GitHub Actions)
+    if 17 <= hour <= 23 and not state["evening_sent"]:
         change = -d
         arrow = "📈" if change > 0 else "📉"
 

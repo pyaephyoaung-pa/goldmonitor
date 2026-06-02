@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="UTF-8">
+<title>Gold Technical Indicators - Complete Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Noto Sans Myanmar', 'Inter', sans-serif; font-size: 11pt; color: #1e293b; line-height: 1.7; padding: 1.5cm 2cm; max-width: 900px; margin: 0 auto; }
+@page { size: A4; margin: 2.5cm; }
+@media print { .page-break { page-break-before: always; } body { font-size: 10pt; } }
+
+.cover { text-align: center; padding-top: 12cm; }
+.cover h1 { font-size: 28pt; color: #2563eb; margin-bottom: 4px; }
+.cover h2 { font-size: 16pt; color: #1e293b; margin-bottom: 12px; }
+.cover .line { width: 60%; height: 3px; background: #2563eb; margin: 16px auto; }
+.cover .sub { font-size: 11pt; color: #64748b; }
+.cover .mm { font-size: 12pt; color: #1e293b; margin-top: 3cm; }
+.cover .bot { font-size: 11pt; color: #64748b; margin-top: 1cm; }
+
+h1.section { font-size: 17pt; color: #2563eb; margin: 24px 0 8px 0; padding-bottom: 6px; border-bottom: 2px solid #2563eb; }
+h2 { font-size: 12pt; color: #1e293b; margin: 16px 0 6px 0; }
+p { margin-bottom: 10px; text-align: justify; }
+
+table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 9.5pt; }
+th { background: #2563eb; color: white; font-weight: 700; text-align: left; padding: 6px 8px; }
+td { padding: 5px 8px; border: 1px solid #cbd5e1; }
+tr:nth-child(even) { background: #f1f5f9; }
+
+.toc { margin: 20px 0; }
+.toc-item { margin-bottom: 12px; }
+.toc-title { font-weight: 700; font-size: 11pt; }
+.toc-desc { font-size: 9pt; color: #64748b; margin-left: 20px; }
+
+.disclaimer { background: #fef3c7; border-left: 4px solid #d97706; padding: 12px 16px; margin: 16px 0; font-size: 10pt; }
+.tip { background: #dcfce7; border-left: 4px solid #16a34a; padding: 10px 14px; margin: 12px 0; font-size: 10pt; }
+.warn { background: #fee2e2; border-left: 4px solid #dc2626; padding: 10px 14px; margin: 12px 0; font-size: 10pt; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+<h1>Gold Technical Indicators</h1>
+<h2>Complete Guide</h2>
+<div class="line"></div>
+<div class="sub">RSI • SMA/EMA • MACD • Bollinger Bands • Momentum • Volatility • Support/Resistance</div>
+<div class="mm">ရွှေဈေး Technical Analysis အတွက် အသေးစိတ် လမ်းညွှန် Guide</div>
+<div class="bot">@PPAgoldBot</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- TOC -->
+<h1 class="section">Table of Contents</h1>
+<div class="toc">
+<div class="toc-item"><div class="toc-title">1. RSI (Relative Strength Index)</div><div class="toc-desc">Oversold/Overbought တိုင်းတာ</div></div>
+<div class="toc-item"><div class="toc-title">2. SMA & EMA (Moving Averages)</div><div class="toc-desc">Trend Direction ကြည့်တဲ့ Indicator</div></div>
+<div class="toc-item"><div class="toc-title">3. MACD (Moving Average Convergence Divergence)</div><div class="toc-desc">Momentum & Trend Change</div></div>
+<div class="toc-item"><div class="toc-title">4. Bollinger Bands</div><div class="toc-desc">ဈေးနှုန်း Range & Volatility</div></div>
+<div class="toc-item"><div class="toc-title">5. Momentum</div><div class="toc-desc">ဈေးပြောင်းလဲမှု Speed</div></div>
+<div class="toc-item"><div class="toc-title">6. Volatility</div><div class="toc-desc">ဈေးနှုန်း ယိမ်းယိုင်မှု</div></div>
+<div class="toc-item"><div class="toc-title">7. Support & Resistance</div><div class="toc-desc">Key Price Levels</div></div>
+<div class="toc-item"><div class="toc-title">8. Combined Strategy</div><div class="toc-desc">Indicators အားလုံး ပေါင်းသုံးပုံ</div></div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 1. RSI -->
+<h1 class="section">1. RSI (Relative Strength Index)</h1>
+
+<h2>RSI ဆိုတာ ဘာလဲ</h2>
+<p>RSI က asset တစ်ခုကို "အရမ်းများများဝယ်ထားပြီးပြီလား" (overbought) ဒါမှမဟုတ် "အရမ်းများများရောင်းထားပြီးပြီလား" (oversold) ဆိုတာကို တိုင်းတာတဲ့ indicator ပါ။ 0 ကနေ 100 ကြားမှာ ရှိပြီး 30 အောက်ဆိုရင် oversold (ဝယ်သင့်တဲ့ အချိန်), 70 အထက်ဆိုရင် overbought (မဝယ်သင့်) ဖြစ်တယ်။</p>
+
+<h2>တွက်ပုံ (Formula)</h2>
+<p>နောက်ဆုံး 14 periods (bot မှာ 14 နာရီ) အတွင်း ဈေးတက်တဲ့ ပမာဏ ပျမ်းမျှ (avg_gain) နဲ့ ဈေးကျတဲ့ ပမာဏ ပျမ်းမျှ (avg_loss) ကို ယှဥ်တယ်။ RS = avg_gain / avg_loss, RSI = 100 - (100 / (1 + RS))။ ဈေးတက်ခဲ့တာ ကျခဲ့တာထက် များရင် RS ကြီးပြီး RSI 50 အထက်ရောက်တယ်။</p>
+
+<h2>RSI Zones</h2>
+<table>
+<tr><th>Zone</th><th>RSI Range</th><th>အဓိပ္ပာယ် & Action</th></tr>
+<tr><td>Extreme Oversold</td><td>0 - 20</td><td>အလွန်ရှားပါး။ Panic selling ဖြစ်နေတာ။ အကြီးဆုံး buy signal ဒါပေမယ့် risk မြင့်။</td></tr>
+<tr><td>Oversold ✅</td><td>20 - 30</td><td>အကောင်းဆုံး buy zone။ Bot score: <strong>+2</strong> (အမြင့်ဆုံး weight)။</td></tr>
+<tr><td>Low</td><td>30 - 40</td><td>ဈေးနည်းနည်းကျနေ။ Bot score: +1။ ဝယ်လို့ရပေမယ့် ideal timing မဟုတ်သေး။</td></tr>
+<tr><td>Neutral</td><td>40 - 60</td><td>ဘယ်ဘက်ကိုမှ ထင်ရှားစွာ မယိမ်း။ RSI တစ်ခုတည်းနဲ့ decision ချဖို့ မလုံလောက်ဘူး။</td></tr>
+<tr><td>High</td><td>60 - 70</td><td>ဈေးတက်နေ။ Bot score: -1။ ဝယ်ဖို့ အကောင်းဆုံး အချိန် မဟုတ်ဘူး။</td></tr>
+<tr><td>Overbought ⛔</td><td>70 - 80</td><td>ဝယ်သူများလွန်းပြီ။ Bot score: <strong>-2</strong>။ ဒီအချိန်မှာ ဝယ်ရင် အရှုံးခံရနိုင်။</td></tr>
+<tr><td>Extreme Overbought</td><td>80 - 100</td><td>ဈေးအလွန်မြင့်။ Correction ဖြစ်ဖို့ အလားအလာ အများဆုံး။</td></tr>
+</table>
+
+<h2>RSI Divergence</h2>
+<p><strong>Bullish Divergence:</strong> ဈေးက new low ချိုးနေပေမယ့် RSI က new low မချိုးတော့ဘူး — ဈေးကျတဲ့ force အားနည်းလာနေပြီ, မကြာခင် ပြန်တက်နိုင်တယ်။</p>
+<p><strong>Bearish Divergence:</strong> ဈေးက new high ချိုးနေပေမယ့် RSI က new high မချိုးတော့ — ဈေးတက်တဲ့ force အားနည်းလာနေ, မကြာခင် ပြန်ကျနိုင်တယ်။</p>
+
+<h2>ကန့်သတ်ချက် (Limitations)</h2>
+<p>1) <strong>Lagging indicator</strong> — ဈေးပြောင်းပြီးမှ RSI ပြောင်းတယ်, ကြိုတင်ခန့်မှန်းတာ မဟုတ်ဘူး။ 2) <strong>Strong trend မှာ မှားနိုင်</strong> — Bull market မှာ RSI 70 ကျော်နေပေမယ့် ဈေးဆက်တက်သွားတာ ရှိတယ်။ 3) <strong>Period 14</strong> က standard ဖြစ်ပြီး balance ကောင်းတယ်, တိုရင် noisy, ရှည်ရင် နှေး။</p>
+
+<div class="tip">💡 <strong>Best Practice:</strong> RSI တစ်ခုတည်းနဲ့ decision မချပါနဲ့။ RSI &lt; 30 (oversold) + Bollinger lower band = ပိုခိုင်မာတဲ့ buy signal။ Bot က indicators 5 ခုကို weighted score ပေးပြီး combined signal ထုတ်ပါတယ်။</div>
+
+<div class="page-break"></div>
+
+<!-- 2. SMA/EMA -->
+<h1 class="section">2. SMA & EMA (Moving Averages)</h1>
+
+<h2>SMA ဆိုတာ ဘာလဲ</h2>
+<p>Simple Moving Average က ဈေးနှုန်း noise ကို ဖယ်ထုတ်ပြီး overall trend direction ပြတယ်။ ရေလှိုင်းတွေ ကြည့်ရင် တစ်လှိုင်းချင်းစီ အတက်အကျ ရှိပေမယ့် ဒီရေကျနေတာလား ဒီရေတက်နေတာလား ဆိုတဲ့ overall trend ကို SMA က ပြပေးတယ်။ SMA5 = နောက်ဆုံး 5 နာရီ ပျမ်းမျှ, SMA20 = 20 နာရီ ပျမ်းမျှ။</p>
+
+<h2>တွက်ပုံ</h2>
+<p>SMA5 = (Price₁ + Price₂ + Price₃ + Price₄ + Price₅) / 5။ ဘာ complicated formula မှ မပါဘူး — ရိုးရိုး average ပါ။</p>
+
+<h2>Golden Cross & Death Cross</h2>
+<table>
+<tr><th>Signal</th><th>Condition</th><th>Bot Score & Meaning</th></tr>
+<tr><td>🟢 Golden Cross</td><td>SMA5 > SMA20 (အပေါ်ကို ဖြတ်ကျော်)</td><td>Score: <strong>-0.5</strong> — ဈေးတက်ပြီးသားမို့ ဝယ်ဖို့ မသင့်တော့</td></tr>
+<tr><td>🔴 Death Cross</td><td>SMA5 < SMA20 (အောက်ကို ဖြတ်ကျ)</td><td>Score: <strong>+1</strong> — ဈေးကျနေတာမို့ ဝယ်ရန် အခွင့်ကောင်း</td></tr>
+</table>
+
+<h2>Crossover % (ma_crossover_pct)</h2>
+<p>SMA5 နဲ့ SMA20 ဘယ်လောက်ကွာလဲ ဆိုတာကို % နဲ့ ပြတယ်။ +0.15% = mild bullish, -0.5% = strong bearish။ ဒီ number ကြီးလေ trend ပိုခိုင်မာလေ။</p>
+
+<h2>EMA (Exponential Moving Average)</h2>
+<p>EMA က recent data ကို weight ပိုပေးတယ်။ SMA က data အားလုံးကို weight ညီတူပေးပေမယ့် EMA က နောက်ဆုံးဈေးကို weight ပိုပေးတဲ့အတွက် ဈေးပြောင်းမှုကို ပိုမြန်မြန် ဖမ်းယူနိုင်တယ်။ MACD indicator က EMA ကို base လုပ်ပြီး ဆောက်ထားတာ။</p>
+
+<h2>Price vs SMA20</h2>
+<p>Bot မှာ price_vs_sma20 ဆိုပြီး လက်ရှိဈေးက SMA20 ထက် ဘယ်လောက် အထက်/အောက် ရှိလဲ ကြည့်တယ်။ ဈေးက SMA20 အောက်ရောက်နေရင် "ပျမ်းမျှထက် ဈေးသက်သာနေတယ်" — ဝယ်ရန်ကောင်းနိုင်။</p>
+
+<div class="warn">⚠️ <strong>Limitations:</strong> 1) Lagging — trend ပြောင်းပြီးမှ SMA ပြောင်းတယ်။ 2) Sideways market မှာ SMA5/SMA20 ခဏခဏ cross ဖြစ်ပြီး false signals ပေးတယ်။ 3) SMA5 က noisy, SMA50 က နှေး — SMA5/SMA20 combo က hourly data အတွက် reasonable။</div>
+
+<div class="page-break"></div>
+
+<!-- 3. MACD -->
+<h1 class="section">3. MACD (Moving Average Convergence Divergence)</h1>
+
+<h2>MACD ဆိုတာ ဘာလဲ</h2>
+<p>EMA နှစ်ခုက converge (နီးလာ) / diverge (ဝေးသွား) ဖြစ်နေလား တိုင်းတာတယ်။ RSI က oversold/overbought ကြည့်, SMA က trend direction ကြည့်ရင် MACD ကတော့ "momentum ပြောင်းနေလား" ကြည့်တယ်။</p>
+
+<h2>အစိတ်အပိုင်း 3 ခု</h2>
+<table>
+<tr><th>Component</th><th>Formula</th><th>What It Shows</th></tr>
+<tr><td><strong>MACD Line</strong></td><td>EMA12 - EMA26</td><td>Short vs Long-term momentum. Positive = bullish, Negative = bearish</td></tr>
+<tr><td><strong>Signal Line</strong></td><td>MACD Line ရဲ့ 9-period EMA</td><td>MACD ရဲ့ ပျမ်းမျှ (smoothed reference line)</td></tr>
+<tr><td><strong>Histogram</strong> ⭐</td><td>MACD Line - Signal Line</td><td>အရေးအကြီးဆုံး! >0 = bullish momentum, <0 = bearish momentum</td></tr>
+</table>
+
+<h2>MACD Crossovers</h2>
+<p><strong>Bullish Crossover:</strong> MACD Line က Signal Line ကို အောက်ကနေ အပေါ်ကို ဖြတ်ကျော်တက် — histogram negative ကနေ positive ဖြစ်သွားတဲ့ အချိန်။ ဈေးကျနေရာကနေ momentum ပြောင်းပြီး တက်စပြုနေပြီ ဆိုတဲ့ signal။</p>
+<p><strong>Bearish Crossover:</strong> ပြောင်းပြန် — MACD Line က Signal Line အောက် ကျသွားတာ။ ဈေးတက်နေရာကနေ momentum ပျောက်ပြီး ကျစပြုနေပြီ။</p>
+
+<h2>Histogram အရွယ်အစား</h2>
+<p>Positive + bar ကြီးလာ = bullish momentum ပြင်းလာ။ Positive + bar သေးလာ = momentum အားနည်းလာ, ပြန်ကျနိုင်။ Negative + bar ကြီးလာ = bearish momentum ပြင်းလာ။ Negative + bar သေးလာ = ကျတာ ပြေးလာ, bounce ဖြစ်နိုင်။</p>
+
+<h2>Zero Line Cross & Divergence</h2>
+<p><strong>Zero Line Cross:</strong> MACD Line > 0 = EMA12 > EMA26, overall bullish trend။ < 0 = bearish trend။ Crossover ထက် ပိုကြီးတဲ့ trend change signal။</p>
+<p><strong>MACD Divergence:</strong> RSI divergence ထက် ပိုယုံကြည်ရတယ်လို့ traders တွေ သတ်မှတ်ကြတယ်။</p>
+
+<h2>Bot Scoring</h2>
+<p>Histogram < 0: buy_score <strong>+0.5</strong> (bearish = ဈေးကျ = ဝယ်ရန်ကောင်း)။ Histogram > 0: buy_score <strong>-0.5</strong>။ MACD weight က RSI (+/-2) ထက် ပိုပေါ့ — EMA 3 ထပ်ယူထားတာမို့ lagging ဆုံး indicator ဖြစ်လို့ confirmation tool အနေနဲ့ သုံးတာ အကောင်းဆုံး။</p>
+
+<div class="page-break"></div>
+
+<!-- 4. BOLLINGER -->
+<h1 class="section">4. Bollinger Bands</h1>
+
+<h2>Bollinger Bands ဆိုတာ ဘာလဲ</h2>
+<p>ဈေးနှုန်း ပတ်ပတ်လည်မှာ "ပုံမှန် range" ကို band 3 ခုနဲ့ ပြတဲ့ indicator။ ခန္ဓာကိုယ် အပူချိန် 36-37°C ပုံမှန်ရှိပြီး အပြင်ဘက်ရောက်ရင် "ပုံမှန်မဟုတ်ဘူး ပြန်ပုံမှန်ဖြစ်လာမယ်" လိုမျိုး။ Statistically ဈေးနှုန်း 95% က upper နဲ့ lower band ကြားမှာ ရှိတတ်။</p>
+
+<h2>Band 3 ခု</h2>
+<table>
+<tr><th>Band</th><th>Formula</th><th>Meaning</th></tr>
+<tr><td>Upper Band</td><td>SMA20 + (2 × Std Dev)</td><td>ပုံမှန်ထက် ဈေးမြင့်နိုင်တဲ့ ceiling</td></tr>
+<tr><td>Middle Band</td><td>SMA20</td><td>ပုံမှန်ဈေး (20 နာရီ ပျမ်းမျှ)</td></tr>
+<tr><td>Lower Band</td><td>SMA20 - (2 × Std Dev)</td><td>ပုံမှန်ထက် ဈေးကျနိုင်တဲ့ floor</td></tr>
+</table>
+
+<h2>Position % & Bot Scoring</h2>
+<table>
+<tr><th>Position</th><th>Location</th><th>Bot Score</th></tr>
+<tr><td>0 - 10%</td><td>Lower band နား</td><td><strong>+1.5</strong> (Strong buy signal)</td></tr>
+<tr><td>10 - 50%</td><td>Lower half</td><td>Neutral to slightly favorable</td></tr>
+<tr><td>50%</td><td>Middle (SMA20)</td><td>Neutral</td></tr>
+<tr><td>50 - 90%</td><td>Upper half</td><td>Neutral to slightly unfavorable</td></tr>
+<tr><td>90 - 100%</td><td>Upper band နား</td><td><strong>-1</strong> (Potential pullback)</td></tr>
+</table>
+
+<h2>Bollinger Squeeze</h2>
+<p>Bands ကျဉ်းလာနေရင် (low volatility) "squeeze" ဖြစ်နေတာ — မုန်တိုင်းမတိုက်ခင် တိတ်ဆိတ်နေတာ လိုမျိုး။ Squeeze ပြီးရင် ဈေးက band တစ်ခုခုကို ဖောက်ထွက်ပြီး big move ဖြစ်တတ်။ Squeeze ကြာလေ breakout ပိုပြင်းလေ (spring ကို ဖိထားသလို)။</p>
+
+<h2>Band Walk</h2>
+<p>ဈေးက upper band ပေါ်ကပ်ပြီး ဆက်တိုက်သွားနေတာ = strong uptrend။ Lower band ပေါ်ကပ်နေတာ = strong downtrend။ ဒီ scenario မှာ "lower band ရောက်ရင် ဝယ်" rule မှားနိုင် — ဈေး lower band ပေါ် walk လုပ်ပြီး ဆက်ကျနိုင်။</p>
+
+<div class="warn">⚠️ <strong>Limitations:</strong> 1) Mean reversion ကို assume လုပ်ထားတာ — trending market မှာ ဈေး band ပေါ် stay လုပ်နိုင်။ 2) Std Dev 2 က default, ရွှေအတွက် reasonable။ 3) RSI နဲ့ confirm လုပ်ပါ — lower band + RSI &lt; 30 = ပိုခိုင်မာ။</div>
+
+<div class="page-break"></div>
+
+<!-- 5. MOMENTUM -->
+<h1 class="section">5. Momentum (Rate of Change)</h1>
+
+<h2>Momentum ဆိုတာ ဘာလဲ</h2>
+<p>ဈေးပြောင်းလဲမှုရဲ့ speed ကို တိုင်းတာတယ်။ Formula: (Current Price - Price 10h ago) / Price 10h ago × 100%။ ကားရဲ့ speedometer လိုမျိုး — direction ရော speed ရော ပြတယ်။ Raw price change ဖြစ်တဲ့အတွက် indicators ထဲမှာ အရိုးရှင်းဆုံး အမြန်ဆုံး signal ပေးတယ်။</p>
+
+<h2>Momentum Zones</h2>
+<table>
+<tr><th>Momentum</th><th>Signal</th><th>Bot Score</th></tr>
+<tr><td>&lt; -0.5%</td><td>DECLINING — ဈေးမြန်မြန်ကျနေ</td><td><strong>+1</strong> (buy opportunity)</td></tr>
+<tr><td>-0.5% to +0.5%</td><td>FLAT — ထင်ရှားတဲ့ ပြောင်းလဲမှု မရှိ</td><td>0 (neutral)</td></tr>
+<tr><td>&gt; +0.5%</td><td>RISING — ဈေးမြန်မြန်တက်နေ</td><td><strong>-0.5</strong> (not ideal to buy)</td></tr>
+</table>
+
+<h2>Momentum Divergence</h2>
+<p>ဈေးက new low ချိုးနေပေမယ့် momentum ပြန်တက်လာ = "ကျတဲ့ speed နှေးလာပြီ" — ပြန်တက်နိုင်။ ပြောင်းပြန်: ဈေး new high ချိုးနေပေမယ့် momentum ကျ = "တက်တဲ့ speed နှေးလာ" — ပြန်ကျနိုင်။</p>
+
+<div class="warn">⚠️ <strong>Limitations:</strong> Raw price change ဖြစ်တဲ့အတွက် noisy, false signals ပိုများ။ 10h ago spike ပျောက်သွားတာကို "ကျ" လို့ မှားပြနိုင်။ Confirmation tool အနေနဲ့ သုံးပါ — RSI &lt; 30 + momentum ပြန်တက်လာ = strong buy signal။</div>
+
+<!-- 6. VOLATILITY -->
+<h1 class="section">6. Volatility</h1>
+
+<h2>Volatility ဆိုတာ ဘာလဲ</h2>
+<p>ဈေးနှုန်း "ဘယ်လောက်ယိမ်းယိုင်နေလဲ" ဆိုတာကို တိုင်းတာတယ်။ Direction မကြည့်ဘူး — ပင်လယ်ရေပြင်: ငြိမ်နေတာလား လှိုင်းထနေတာလား ကြည့်သလိုမျိုး။ Formula: Std Dev / Mean × 100% (last 20 hours)။</p>
+
+<h2>Volatility Levels</h2>
+<table>
+<tr><th>Volatility</th><th>Market State</th><th>Implications</th></tr>
+<tr><td>~0.01%</td><td>Very Calm</td><td>ဈေးပြောင်းလဲမှု မရှိသလောက်။ Low risk, low opportunity</td></tr>
+<tr><td>0.05-0.10%</td><td>Normal</td><td>ရွှေဈေး ပုံမှန် ယိမ်းယိုင်မှု</td></tr>
+<tr><td>0.20%+</td><td>High Volatility</td><td>ဈေး ကြီးကြီးမားမား ယိမ်း။ High risk + high opportunity</td></tr>
+</table>
+
+<h2>Key Concepts</h2>
+<p><strong>Volatility Clustering:</strong> Volatile ဖြစ်တဲ့ နေ့တွေ ဆက်တိုက်ဖြစ်တတ်တယ်။ ဒီနေ့ volatile ဆိုရင် မနက်ဖြန်လည်း volatile ဖြစ်နိုင်ခြေ မြင့်။</p>
+<p><strong>Bollinger Squeeze = Low Volatility = Big move လာတော့မယ်။</strong></p>
+<p><strong>Position Sizing:</strong> Volatility မြင့်ရင် ဝယ်တဲ့ ပမာဏ လျှော့ချသင့် (risk ပိုမြင့်)။</p>
+
+<h2>Momentum + Volatility Combined</h2>
+<table>
+<tr><th>Momentum</th><th>Volatility</th><th>Interpretation</th></tr>
+<tr><td>Negative</td><td>High</td><td>ဈေး ပြင်းပြင်းထန်ထန် ကျနေ။ Risky but may be oversold</td></tr>
+<tr><td>Negative</td><td>Low</td><td>ဈေး ဖြေးဖြေးကျ။ Urgent မဟုတ်, ဆက်စောင့်ကြည့်လို့ ရ</td></tr>
+<tr><td>Zero</td><td>Very Low</td><td>Bollinger Squeeze! Big move လာတော့မယ်, RSI/MACD နဲ့ direction ခန့်မှန်း</td></tr>
+<tr><td>Positive</td><td>High</td><td>ဈေး ပြင်းပြင်းတက်။ Profit ယူဖို့ စဉ်းစားပါ</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- 7. SUPPORT/RESISTANCE -->
+<h1 class="section">7. Support & Resistance</h1>
+
+<h2>Support/Resistance ဆိုတာ ဘာလဲ</h2>
+<p><strong>Support</strong> = ဈေး "ဒီအောက် ဆက်မကျတော့ဘူး" level (ကြမ်းပြင်)။ <strong>Resistance</strong> = ဈေး "ဒီအထက် ဆက်မတက်နိုင်ဘူး" level (အမိုး)။ တခြား indicators တွေက signals ပေးရင် support/resistance ကတော့ specific price levels ပေးတယ်။</p>
+
+<h2>ဘာကြောင့် ဖြစ်ရတာလဲ — Psychology</h2>
+<p><strong>Support:</strong> ဈေးက level တစ်ခုကျရောက်ရင် ဝယ်သူတွေ "ဈေးသက်သာပြီ" ဝယ်ကြတယ်, ဝယ်အားများလာပြီး ဈေးပြန်တက်။ ฿4,200 မှာ အရင်တစ်ခါ bounce ဖြစ်ခဲ့ရင် နောက်ပြန်ရောက်လာတဲ့အခါ လူတွေ ဝယ်ကြတယ် — self-fulfilling prophecy။</p>
+<p><strong>Resistance:</strong> ဈေးတက်ပြီး level ရောက်ရင် ရောင်းသူတွေ "ဈေးကောင်းပြီ" ရောင်းကြ, ရောင်းအားများပြီး ဈေးပြန်ကျ။</p>
+
+<h2>Bot Calculation</h2>
+<table>
+<tr><th>Level</th><th>Method</th><th>Meaning</th></tr>
+<tr><td>Support 1</td><td>10th percentile (48h)</td><td>ဈေးတွေ 90% ဒီအထက်မှာ ရှိခဲ့</td></tr>
+<tr><td>Support 2</td><td>5th percentile (48h)</td><td>ဈေးတွေ 95% ဒီအထက်မှာ။ ပိုခိုင်မာတဲ့ floor</td></tr>
+<tr><td>Resistance 1</td><td>90th percentile (48h)</td><td>ဈေးတွေ 90% ဒီအောက်မှာ ရှိခဲ့</td></tr>
+<tr><td>Resistance 2</td><td>95th percentile (48h)</td><td>ဈေးတွေ 95% ဒီအောက်မှာ။ ပိုခိုင်မာတဲ့ ceiling</td></tr>
+</table>
+
+<h2>Practical Usage</h2>
+<p><strong>Buy Decision:</strong> ဈေး Support 1 နားရောက် + RSI &lt; 30 = strong buy signal။</p>
+<p><strong>Target Setting:</strong> ฿4,180 (support) မှာ ဝယ်ပြီး ฿4,310 (resistance) မှာ profit ယူ = ฿130/g potential profit။</p>
+<p><strong>Risk Management:</strong> Support 2 အောက်မှာ stop-loss set။ Risk:Reward ratio ကြည့်ပြီး trade worth it လား ဆုံးဖြတ်ပါ။</p>
+
+<h2>Breakout & Role Reversal</h2>
+<p>Support ကို ဈေးဖောက်ချိုးပြီး အောက်ကျသွားရင် ဒီ support level က resistance ဖြစ်သွားတယ်။ ฿4,200 support ကို ฿4,150 ဖောက်ကျပြီး ပြန်တက်လာရင် ฿4,200 မှာ ရောင်းချင်သူတွေ (breakeven) ကြောင့် resistance ဖြစ်သွားတယ်။</p>
+
+<h2>Strength Factors</h2>
+<p><strong>Touch Count:</strong> Level ကို ဘယ်နှစ်ကြိမ် ထိပြီး ပြန်ကန်ခဲ့လဲ — 5 ကြိမ် = strong support (ဒါပေမယ့် ထိများလေ ဖောက်ချိုးခံရနိုင်ခြေ ပိုများလေ)။ <strong>Round Numbers:</strong> ฿4,000, $3,000 လို ဂဏန်းတွေက natural support/resistance ဖြစ်တတ်။</p>
+
+<div class="page-break"></div>
+
+<!-- 8. COMBINED -->
+<h1 class="section">8. Indicators Combined Strategy</h1>
+
+<h2>Bot Scoring System</h2>
+<table>
+<tr><th>Indicator</th><th>Bullish (Buy) Score</th><th>Bearish Score</th></tr>
+<tr><td>RSI &lt; 30 (oversold)</td><td><strong>+2</strong></td><td></td></tr>
+<tr><td>RSI 30-40</td><td>+1</td><td></td></tr>
+<tr><td>RSI 60-70</td><td></td><td>-1</td></tr>
+<tr><td>RSI &gt; 70 (overbought)</td><td></td><td><strong>-2</strong></td></tr>
+<tr><td>SMA5 &lt; SMA20 (death cross)</td><td>+1</td><td></td></tr>
+<tr><td>SMA5 &gt; SMA20 (golden cross)</td><td></td><td>-0.5</td></tr>
+<tr><td>MACD histogram &lt; 0</td><td>+0.5</td><td></td></tr>
+<tr><td>MACD histogram &gt; 0</td><td></td><td>-0.5</td></tr>
+<tr><td>Bollinger position &lt; 20%</td><td><strong>+1.5</strong></td><td></td></tr>
+<tr><td>Bollinger position &gt; 80%</td><td></td><td>-1</td></tr>
+<tr><td>Momentum &lt; -1%</td><td>+1</td><td></td></tr>
+<tr><td>Momentum &gt; +1%</td><td></td><td>-0.5</td></tr>
+</table>
+
+<h2>Final Signal (Normalized Score)</h2>
+<table>
+<tr><th>Score</th><th>Signal</th><th>Action</th></tr>
+<tr><td>&gt; 1.0</td><td>🟢 <strong>STRONG BUY</strong></td><td>အကောင်းဆုံး ဝယ်ခွင့်။ Indicators အားလုံး align ဖြစ်နေ</td></tr>
+<tr><td>0.3 to 1.0</td><td>🟡 <strong>BUY</strong></td><td>အခွင့်ကောင်း။ ဝယ်ရန် စဉ်းစားပါ</td></tr>
+<tr><td>-0.3 to 0.3</td><td>⚪ <strong>HOLD</strong></td><td>ဈေးတည်ငြိမ်။ စောင့်ကြည့်ပါ</td></tr>
+<tr><td>-1.0 to -0.3</td><td>🟠 <strong>WAIT</strong></td><td>ဈေးတက်နေ။ ဝယ်ဖို့ မသင့်သေး</td></tr>
+<tr><td>&lt; -1.0</td><td>🔴 <strong>OVERBOUGHT</strong></td><td>ဈေးအလွန်မြင့်။ မဝယ်သင့်</td></tr>
+</table>
+
+<h2>Ideal Buy Scenario — Indicators အားလုံး Align</h2>
+<div class="tip">
+🎯 <strong>အခိုင်မာဆုံး Buy Signal:</strong><br>
+✅ RSI &lt; 30 (oversold)<br>
+✅ SMA5 &lt; SMA20 (death cross)<br>
+✅ MACD histogram → negative ကနေ positive ဖြစ်လာ (bullish crossover)<br>
+✅ Bollinger position &lt; 10% (lower band နား)<br>
+✅ Momentum negative but improving<br>
+✅ ဈေး Support level နားရောက်နေ<br>
+<br>
+ဒီအခါ indicators အားလုံး align ဖြစ်ပြီး combined score = <strong>STRONG BUY</strong>, confidence အမြင့်ဆုံး။
+</div>
+
+<div class="disclaimer">
+⚠️ <strong>Important Disclaimer</strong><br><br>
+Technical indicators တွေက tools သာ ဖြစ်ပြီး guarantees မဟုတ်ပါ။ ဖြစ်ပြီးသား data ကို ကြည့်ပြီး probabilities တွက်တာပါ။<br><br>
+1) ရှုံးနိုင်တဲ့ ပမာဏကိုသာ ရင်းနှီးပါ။<br>
+2) DCA (Dollar Cost Averaging) strategy သုံးပြီး timing risk လျှော့ချပါ။<br>
+3) သတင်း, နိုင်ငံရေး, ဗဟိုဘဏ် ဆုံးဖြတ်ချက်တွေက technical signals အားလုံးကို override လုပ်နိုင်ပါတယ်။<br>
+4) Bot က information ပေးတာ ဖြစ်ပြီး နောက်ဆုံး ဆုံးဖြတ်ချက်က သင်ကိုယ်တိုင်ပါ။
+</div>
+
+</body>
+</html>
