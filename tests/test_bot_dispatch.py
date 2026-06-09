@@ -62,6 +62,15 @@ def test_public_command_routes(monkeypatch):
     assert called.get("cid") == "222"
 
 
+def test_macro_command_routes(monkeypatch):
+    _capture(monkeypatch)
+    called = {}
+    monkeypatch.setattr(bot_core, "cmd_macro", lambda cid: called.setdefault("cid", cid))
+    handled = bot_core.dispatch_update(_update("/macro", chat_id="222"))
+    assert handled is True
+    assert called.get("cid") == "222"
+
+
 def test_non_command_ignored(monkeypatch):
     _capture(monkeypatch)
     assert bot_core.dispatch_update(_update("hello there")) is False

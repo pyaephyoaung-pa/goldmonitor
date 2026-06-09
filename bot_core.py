@@ -22,6 +22,7 @@ import requests
 import storage
 import predictor
 import goldapi
+import signals
 from gold_format import fmt, gold_breakdown
 
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
@@ -163,6 +164,20 @@ def cmd_predict(chat_id: str):
     prediction = predictor.predict(history, model_data)
     msg = predictor.format_prediction_message(prediction)
     send_message(msg, chat_id)
+
+
+def cmd_macro(chat_id: str):
+    """Show the macro & fear context (DXY / US10Y / VIX) on demand."""
+    block = signals.format_macro_block()
+    if not block:
+        send_message("⚠️ Macro data ယူမရပါ — ခဏနေ ပြန်စမ်းပါ", chat_id)
+        return
+    send_message(
+        f"{block}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"ℹ️ Gold drivers — context only, not a forecast",
+        chat_id,
+    )
 
 
 def cmd_bought(chat_id: str, args: str):
@@ -464,6 +479,7 @@ def cmd_help(chat_id: str):
         "━━━━━━━━━━━━━━━\n"
         "💰 /price — လက်ရှိ ရွှေဈေး\n"
         "🔮 /predict — 4h/12h/24h ခန့်မှန်းချက်\n"
+        "🌍 /macro — DXY / US10Y / VIX + fear score\n"
         "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
         "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
         "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
@@ -487,6 +503,7 @@ def cmd_help(chat_id: str):
 PUBLIC_COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
     "/predict": lambda cid, _: cmd_predict(cid),
+    "/macro": lambda cid, _: cmd_macro(cid),
     "/history": cmd_history,
     "/subscribe": lambda cid, _: cmd_subscribe(cid),
     "/unsubscribe": lambda cid, _: cmd_unsubscribe(cid),

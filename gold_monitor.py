@@ -23,6 +23,7 @@ import storage
 import predictor
 import goldapi
 import bot_core
+import signals
 from gold_format import fmt, gold_breakdown
 
 # ── Config ──────────────────────────────────────────────────────
@@ -143,6 +144,10 @@ def main():
             if ta.get("overall_signal"):
                 ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
 
+        # Macro & fear context (DXY / US10Y / VIX). Omitted if unavailable.
+        macro_block = signals.format_macro_block()
+        macro_lines = f"\n━━━━━━━━━━━━━━━\n{macro_block}" if macro_block else ""
+
         gb = gold_breakdown(thb_gram)
         notify(
             f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
@@ -158,7 +163,8 @@ def main():
             f"🌐 Spot     : ${usd_oz}/oz\n"
             f"💱 Rate     : 1 USD = {thb_rate} THB\n"
             f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
-            f"{trend_lines}{ta_line}\n"
+            f"{trend_lines}{ta_line}"
+            f"{macro_lines}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"✅ Monitoring စပြီ!"
         )
@@ -287,6 +293,10 @@ def main():
                 f"{'rise' if trend['streak_direction'] == 'up' else 'decline'}"
             )
 
+        # Macro & fear context (DXY / US10Y / VIX). Omitted if unavailable.
+        macro_block = signals.format_macro_block()
+        macro_lines = f"\n━━━━━━━━━━━━━━━\n{macro_block}" if macro_block else ""
+
         notify(
             f"🌙 <b>ညနေ ရွှေဈေး အနှစ်ချုပ်</b>\n"
             f"📅 {time_str}\n"
@@ -297,7 +307,8 @@ def main():
             f"⬆️ Day High  : {fmt(state['day_high'])}/g\n"
             f"⬇️ Day Low   : {fmt(state['day_low'])}/g\n"
             f"🌐 Spot: ${usd_oz}/oz"
-            f"{trend_lines}{streak_line}{portfolio_lines}{predict_line}\n"
+            f"{trend_lines}{streak_line}{portfolio_lines}{predict_line}"
+            f"{macro_lines}\n"
             f"━━━━━━━━━━━━━━━"
         )
         state["evening_sent"] = True
