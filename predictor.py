@@ -328,7 +328,16 @@ def train_model(history: list) -> dict | None:
     models = {}
     horizons = {"4h": 4, "12h": 12, "24h": 24}
 
+    def _make_model():
+        return GradientBoostingClassifier(
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.1,
+            random_state=42,
+        )
+
     for name, horizon in horizons.items():
+        # Build samples in chronological order (do NOT shuffle — time series).
         X, y = [], []
         for i in range(26, len(history) - horizon):
             features = _extract_features(history, i)
@@ -337,31 +346,60 @@ def train_model(history: list) -> dict | None:
                 X.append(features)
                 y.append(label)
 
-        if len(X) < 50:
+        if len(X) < 60:
             print(f"[predictor] Not enough labeled data for {name}: {len(X)} samples")
             continue
 
         X_arr = np.array(X)
         y_arr = np.array(y)
 
-        model = GradientBoostingClassifier(
-            n_estimators=50,
-            max_depth=3,
-            learning_rate=0.1,
-            random_state=42,
+        # ── Honest evaluation: chronological hold-out ────────────────
+        # The previous version reported *training* accuracy, which on a
+        # near-random-walk price series just measures overfitting. We instead
+        # train on the first 80% and score on the most recent 20% the model has
+        # never seen, then compare against a majority-class baseline so we can
+        # tell whether the model has any real edge over a coin flip.
+        split = int(len(X_arr) * 0.8)
+        X_tr, X_te = X_arr[:split], X_arr[split:]
+        y_tr, y_te = y_arr[:split], y_arr[split:]
+
+        if len(X_te) < 20:
+            print(f"[predictor] {name}: too few hold-out samples ({len(X_te)}) — skipping")
+            continue
+
+        eval_model = _make_model()
+        eval_model.fit(X_tr, y_tr)
+        oos_acc = round(eval_model.score(X_te, y_te) * 100, 1)
+        train_acc = round(eval_model.score(X_tr, y_tr) * 100, 1)
+
+        # Majority-class baseline measured on the same hold-out window.
+        ones = int(y_te.sum())
+        n_te = len(y_te)
+        baseline_acc = round(max(ones, n_te - ones) / n_te * 100, 1)
+
+        # "Edge" = beats the naive baseline by a margin (not just noise).
+        has_edge = oos_acc >= baseline_acc + 2.0
+
+        print(
+            f"[predictor] {name}: OOS={oos_acc}% baseline={baseline_acc}% "
+            f"train={train_acc}% edge={has_edge} ({len(X)} samples, {n_te} test)"
         )
+
+        # Deploy a model trained on ALL data; the metrics above describe its
+        # expected real-world skill.
+        model = _make_model()
         model.fit(X_arr, y_arr)
 
-        # Training accuracy
-        acc = round(model.score(X_arr, y_arr) * 100, 1)
-        print(f"[predictor] {name} model trained — accuracy: {acc}% on {len(X)} samples")
-
-        # Serialize model
         model_bytes = pickle.dumps(model)
         models[name] = {
             "model_b64": base64.b64encode(model_bytes).decode("utf-8"),
-            "accuracy": acc,
+            "accuracy": oos_acc,          # back-compat: now the honest OOS number
+            "oos_accuracy": oos_acc,
+            "baseline_accuracy": baseline_acc,
+            "train_accuracy": train_acc,
+            "has_edge": has_edge,
             "samples": len(X),
+            "test_samples": n_te,
         }
 
     if not models:
@@ -439,8 +477,11 @@ def predict(history: list, model_data: dict) -> dict:
                 result["predictions"][horizon_name] = {
                     "direction": direction,
                     "confidence": confidence,
-                    "model_accuracy": minfo["accuracy"],
-                    "training_samples": minfo["samples"],
+                    "model_accuracy": minfo.get("accuracy"),
+                    "oos_accuracy": minfo.get("oos_accuracy", minfo.get("accuracy")),
+                    "baseline_accuracy": minfo.get("baseline_accuracy"),
+                    "has_edge": minfo.get("has_edge", False),
+                    "training_samples": minfo.get("samples"),
                 }
             except Exception as e:
                 result["predictions"][horizon_name] = {"error": str(e)}
@@ -451,18 +492,30 @@ def predict(history: list, model_data: dict) -> dict:
 
     # ── Combined Signal ─────────────────────────────────────────
     if result.get("predictions"):
-        up_votes = sum(
-            1 for p in result["predictions"].values()
-            if isinstance(p, dict) and p.get("direction") == "UP"
-        )
-        total = len([p for p in result["predictions"].values() if isinstance(p, dict) and "direction" in p])
-        if total > 0:
+        directional = [
+            p for p in result["predictions"].values()
+            if isinstance(p, dict) and "direction" in p
+        ]
+        # Only trust horizons that actually beat the baseline out-of-sample.
+        edged = [p for p in directional if p.get("has_edge")]
+        result["ml_has_edge"] = bool(edged)
+
+        if not edged:
+            # Honesty: none of the models show real predictive skill. Don't
+            # dress up coin-flips as a forecast.
+            result["combined_outlook"] = (
+                "⚠️ ML models show no historical edge over a coin-flip — "
+                "treat ML as noise; rely on the TA signal below"
+            )
+        else:
+            up_votes = sum(1 for p in edged if p.get("direction") == "UP")
+            total = len(edged)
             if up_votes > total / 2:
-                result["combined_outlook"] = "ML models lean BULLISH"
+                result["combined_outlook"] = "ML models (with edge) lean BULLISH"
             elif up_votes < total / 2:
-                result["combined_outlook"] = "ML models lean BEARISH — consider buying"
+                result["combined_outlook"] = "ML models (with edge) lean BEARISH — consider buying"
             else:
-                result["combined_outlook"] = "ML models are MIXED"
+                result["combined_outlook"] = "ML models (with edge) are MIXED"
 
     return result
 
@@ -620,12 +673,21 @@ def format_prediction_message(prediction: dict) -> str:
             if "direction" in pred:
                 arrow = "🟢" if pred["direction"] == "UP" else "🔴"
                 conf_bar = "▓" * int(pred["confidence"] / 20) + "░" * (5 - int(pred["confidence"] / 20))
+                edge_tag = "✅edge" if pred.get("has_edge") else "⚠️no-edge"
+                oos = pred.get("oos_accuracy")
+                base = pred.get("baseline_accuracy")
+                acc_part = ""
+                if oos is not None and base is not None:
+                    acc_part = f" | OOS {oos}% vs base {base}% {edge_tag}"
                 lines.append(
                     f"  {arrow} {horizon}: {pred['direction']} "
-                    f"[{conf_bar}] {pred['confidence']}%"
+                    f"[{conf_bar}] {pred['confidence']}%{acc_part}"
                 )
             elif "error" in pred:
                 lines.append(f"  ⚠️ {horizon}: {pred['error']}")
+
+        if prediction.get("ml_has_edge") is False:
+            lines.append("  ⚠️ No model beats a coin-flip out-of-sample — ML is noise here.")
 
     # Final Outlook
     lines.append("━━━━━━━━━━━━━━━")

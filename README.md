@@ -133,6 +133,8 @@ RSI, SMA (5/20), EMA, MACD, Bollinger Bands, Momentum — combined into a buy/ho
 **ML Model (after 100+ data points ≈ 4 days):**
 GradientBoosting classifier trained on historical features. Predicts price direction for 4h, 12h, and 24h horizons. Auto-retrains daily at 3am.
 
+Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the combined outlook tells you to ignore ML and rely on the TA signal. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
+
 Both signals are combined for a final outlook in alerts and the `/predict` command.
 
 ---
@@ -141,18 +143,30 @@ Both signals are combined for a final outlook in alerts and the `/predict` comma
 
 ```
 goldmonitor/
-├── gold_monitor.py          # Main hourly monitor
-├── predictor.py             # TA indicators + ML prediction
+├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
-├── bot_commands.py          # Telegram command handler (polling)
+├── goldapi.py               # Price + FX fetch, multi-source fallback (shared)
+├── gold_format.py           # Price formatting helpers (shared)
+├── bot_core.py              # Telegram I/O + all /command handlers + dispatch (shared)
+├── bot_commands.py          # Polling entrypoint (thin) — self-disables if webhook set
 ├── api/
-│   └── webhook.py           # Vercel webhook handler (instant replies)
+│   └── webhook.py           # Vercel webhook entrypoint (thin, instant replies)
+├── tests/                   # pytest suite (math, portfolio, dispatch, fallbacks)
 ├── setup_gist.py            # One-time Gist setup script
 ├── setup_webhook.py         # Webhook setup script
 ├── vercel.json              # Vercel deployment config
-├── requirements.txt         # Python dependencies
+├── requirements.txt         # Runtime dependencies
+├── requirements-dev.txt     # + pytest for tests
 ├── .github/workflows/
-│   ├── gold_monitor.yml     # 8-min price check
-│   └── bot_commands.yml     # 5-min command polling
+│   ├── gold_monitor.yml     # Price check (cron)
+│   └── bot_commands.yml     # Command polling (fallback to webhook)
 └── README.md
 ```
+
+> ⚡ **Webhook vs polling:** the Vercel webhook gives instant replies. Telegram
+> rejects `getUpdates` (HTTP 409) while a webhook is set, so the polling job now
+> auto-disables when a webhook is configured — the two no longer conflict. Use
+> the webhook as primary; polling is the keyless fallback.
+
+> 🧪 **Tests:** `pip install -r requirements-dev.txt && pytest`

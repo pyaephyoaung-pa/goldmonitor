@@ -5,18 +5,19 @@
       "src": "api/webhook.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": ["storage.py", "predictor.py", "api/webhook.py"]
+        "includeFiles": [
+          "storage.py",
+          "predictor.py",
+          "goldapi.py",
+          "gold_format.py",
+          "bot_core.py",
+          "api/webhook.py"
+        ]
       }
     }
   ],
   "routes": [
-    {
-      "src": "/api/webhook",
-      "dest": "/api/webhook.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/webhook.py"
-    }
+    { "src": "/api/webhook", "dest": "/api/webhook.py" },
+    { "src": "/(.*)", "dest": "/api/webhook.py" }
   ]
 }

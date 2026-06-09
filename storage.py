@@ -95,8 +95,15 @@ def _write_files(file_dict: dict):
 
 # ── Price History ───────────────────────────────────────────────
 def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
-    """Append a price data point. Keep last 720 entries (~30 days hourly)."""
-    history = _read_file(PRICE_HISTORY_FILE)
+    """Append a price data point. Keep last 720 entries (~30 days hourly).
+
+    Best-effort concurrency guard: the Gist is a shared store with no locking,
+    so two overlapping runs could each read, append, and overwrite each other —
+    losing a point. To narrow that window we re-read the freshest copy right
+    before writing and merge by timestamp (deduping). This does not fully
+    eliminate the race (a proper fix needs a real datastore), but it makes
+    concurrent appends far less likely to clobber data.
+    """
     now = datetime.now(BANGKOK_TZ)
     entry = {
         "ts": now.isoformat(),
@@ -106,9 +113,19 @@ def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
         "hour": now.hour,
         "weekday": now.weekday(),
     }
-    history.append(entry)
-    # Keep last 720 data points (~30 days of hourly data)
-    history = history[-720:]
+
+    # Re-read immediately before writing to pick up any concurrent appends.
+    history = _read_file(PRICE_HISTORY_FILE)
+    seen_ts = {h.get("ts") for h in history}
+    if entry["ts"] not in seen_ts:
+        history.append(entry)
+
+    # Stable de-dup by timestamp, then keep the most recent 720 points.
+    deduped = {}
+    for h in history:
+        deduped[h.get("ts")] = h
+    history = sorted(deduped.values(), key=lambda h: h.get("ts", ""))[-720:]
+
     _write_file(PRICE_HISTORY_FILE, history)
     return history
 
@@ -141,6 +158,7 @@ def load_day_state() -> dict:
         "notified_rise_3": False,
         "notified_rise_4": False,
         "notified_rise_5": False,
+        "morning_sent": False,
         "evening_sent": False,
     }
 

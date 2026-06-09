@@ -8,19 +8,22 @@ Features:
   • Portfolio tracking with P&L
   • Rich evening summary with trends
   • GitHub Gist persistent storage
-  • Retry logic for API calls
+  • Retry logic + multi-source price fallback (see goldapi.py)
 
-GitHub Actions: hourly auto-run
+GitHub Actions: runs on a cron through the day.
+Shared logic (price fetch, formatting, Telegram send) lives in goldapi.py,
+gold_format.py and bot_core.py so it is not duplicated here.
 """
 
-import requests
 import os
-import time
 from datetime import datetime
 import pytz
 
 import storage
 import predictor
+import goldapi
+import bot_core
+from gold_format import fmt, gold_breakdown
 
 # ── Config ──────────────────────────────────────────────────────
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
@@ -28,7 +31,6 @@ TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 DROP_THRESHOLD = float(os.environ.get("DROP_THRESHOLD", "0.5"))
 RISE_THRESHOLD = float(os.environ.get("RISE_THRESHOLD", "0.5"))
-TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
 
 # Try to load thresholds from bot state (user-configurable via /setthreshold, /setrisethreshold)
 try:
@@ -41,106 +43,34 @@ except Exception:
     pass
 
 
-# ── Gold Price Fetch (with retry) ───────────────────────────────
-
-def get_gold_price(retries: int = 2) -> tuple:
-    """Fetch gold price with retry logic.
-    Returns (thb_gram, usd_oz, thb_rate) or (None, None, None).
-    """
-    for attempt in range(retries + 1):
-        usd_oz = None
-        thb_rate = None
-
-        # Gold spot price — primary: Twelve Data
-        try:
-            r = requests.get(
-                "https://api.twelvedata.com/price",
-                params={"symbol": "XAU/USD", "apikey": TWELVE_DATA_API_KEY},
-                timeout=10,
-            )
-            r.raise_for_status()
-            usd_oz = float(r.json()["price"])
-        except Exception:
-            # Fallback: metals.live
-            try:
-                r = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
-                r.raise_for_status()
-                usd_oz = float(r.json()[0]["gold"])
-            except Exception as e:
-                if attempt < retries:
-                    print(f"[retry {attempt+1}] Gold price failed: {e}")
-                    time.sleep(10)
-                    continue
-                print(f"[ERROR] Gold price fetch failed after retries: {e}")
-                return None, None, None
-
-        # USD/THB exchange rate
-        try:
-            r2 = requests.get(
-                "https://api.exchangerate-api.com/v4/latest/USD", timeout=10
-            )
-            r2.raise_for_status()
-            thb_rate = r2.json()["rates"]["THB"]
-        except Exception as e:
-            if attempt < retries:
-                print(f"[retry {attempt+1}] FX rate failed: {e}")
-                time.sleep(10)
-                continue
-            print(f"[ERROR] FX rate fetch failed after retries: {e}")
-            return None, None, None
-
-        thb_gram = round((usd_oz * thb_rate) / 31.1035, 2)
-        return thb_gram, round(usd_oz, 2), round(thb_rate, 2)
-
-    return None, None, None
-
-
 # ── Telegram Notify ─────────────────────────────────────────────
 
-def _send_to(chat_id: str, msg: str):
-    """Send a message to a single chat ID."""
-    try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
-            timeout=10,
-        )
-        resp = r.json()
-        if resp.get("ok"):
-            print(f"[Telegram] Sent to {chat_id}: OK")
-        else:
-            print(f"[Telegram] Failed for {chat_id}: {resp.get('description', 'unknown')}")
-            # If bot was blocked by user, auto-remove from subscribers
-            if resp.get("error_code") == 403:
-                print(f"[Telegram] Removing blocked subscriber: {chat_id}")
-                storage.remove_subscriber(chat_id)
-    except Exception as e:
-        print(f"[Telegram] Send error for {chat_id}: {e}")
-
-
 def notify(msg: str):
-    """Send message to owner + all subscribers."""
+    """Send message to owner + all subscribers.
+
+    Uses the shared bot_core.send_message; auto-removes subscribers who have
+    blocked the bot (Telegram error_code 403).
+    """
     if not TG_BOT_TOKEN:
         print("[WARN] Telegram bot token not set")
         print(msg)
         return
 
-    # Send to owner
+    recipients = []
     if TG_CHAT_ID:
-        _send_to(TG_CHAT_ID, msg)
-
-    # Send to all subscribers
-    subscribers = storage.get_subscribers()
-    for sub_id in subscribers:
+        recipients.append(TG_CHAT_ID)
+    for sub_id in storage.get_subscribers():
         if sub_id != TG_CHAT_ID:  # avoid duplicate if owner subscribed
-            _send_to(sub_id, msg)
+            recipients.append(sub_id)
+
+    for chat_id in recipients:
+        resp = bot_core.send_message(msg, chat_id)
+        if resp and not resp.get("ok") and resp.get("error_code") == 403:
+            print(f"[Telegram] Removing blocked subscriber: {chat_id}")
+            storage.remove_subscriber(chat_id)
 
 
 # ── Helpers ─────────────────────────────────────────────────────
-
-def fmt(n):
-    return f"฿{n:,.0f}"
-
 
 def drop_pct(open_p, cur):
     return ((open_p - cur) / open_p) * 100
@@ -148,22 +78,6 @@ def drop_pct(open_p, cur):
 
 def rise_pct(open_p, cur):
     return ((cur - open_p) / open_p) * 100
-
-
-BAHT_WEIGHT_GRAMS = 15.244  # 1 บาททอง = 15.244 grams
-
-
-def gold_breakdown(thb_gram_9999):
-    """Calculate gold prices for 99.99% and 96.50% purity."""
-    baht_9999 = round(thb_gram_9999 * BAHT_WEIGHT_GRAMS, 2)
-    gram_9650 = round(thb_gram_9999 * (96.50 / 99.99), 2)
-    baht_9650 = round(gram_9650 * BAHT_WEIGHT_GRAMS, 2)
-    return {
-        "gram_9999": thb_gram_9999,
-        "baht_9999": baht_9999,
-        "gram_9650": gram_9650,
-        "baht_9650": baht_9650,
-    }
 
 
 # ── Main Monitor ────────────────────────────────────────────────
@@ -176,7 +90,7 @@ def main():
     print(f"[{time_str}] Gold Monitor v2 checking...")
 
     # ── Fetch Price ─────────────────────────────────────────────
-    thb_gram, usd_oz, thb_rate = get_gold_price()
+    thb_gram, usd_oz, thb_rate = goldapi.get_gold_price()
     if thb_gram is None:
         notify("⚠️ <b>YLG Monitor</b>\nAPI error — ဈေးနှုန်း ယူမရပါ")
         return
