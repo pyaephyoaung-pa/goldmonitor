@@ -2,9 +2,12 @@ name: Gold Price Monitor
 
 on:
   schedule:
-    - cron: "*/5 0-17 * * 1-5"  # Mon-Fri: every 5min, 7am-midnight BKK (UTC+7)
-    - cron: "*/5 0-17 * * 6"   # Sat: every 5min, 7am-midnight BKK
-    - cron: "*/5 10-17 * * 0"  # Sun: every 5min, 5pm-midnight BKK
+    # NOTE: UTC. BKK = UTC+7. We stop at 16 UTC (= 23:00-23:55 BKK) on purpose:
+    # 17 UTC would be 00:00-00:55 BKK the *next* day, which used to steal the
+    # first-run-of-day slot and suppress the morning message.
+    - cron: "*/5 0-16 * * 1-5"  # Mon-Fri: every 5min, 07:00-23:55 BKK
+    - cron: "*/5 0-16 * * 6"    # Sat:     every 5min, 07:00-23:55 BKK
+    - cron: "*/5 10-16 * * 0"   # Sun:     every 5min, 17:00-23:55 BKK
   workflow_dispatch:
 
 permissions:

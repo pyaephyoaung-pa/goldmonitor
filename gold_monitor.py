@@ -104,7 +104,7 @@ def main():
     # ── Day State ───────────────────────────────────────────────
     state = storage.load_day_state()
 
-    # First run of the day — set open price
+    # First run of the day — anchor the day's open/high/low.
     if state["open_price"] is None:
         state.update({
             "open_price": thb_gram,
@@ -113,50 +113,57 @@ def main():
         })
         storage.save_day_state(state)
 
-        # Send morning message during reasonable hours (6am-2pm BKK)
-        # Wider window because GitHub Actions can delay 30+ minutes
-        if 6 <= hour <= 14:
-            # Include trend if we have history
-            trend_lines = ""
-            if len(history) >= 24:
-                trend = predictor.get_trend_summary(history)
-                parts = []
-                if "change_24h" in trend:
-                    parts.append(f"24h: {trend['change_24h']:+.3f}%")
-                if "change_7d" in trend:
-                    parts.append(f"7d: {trend['change_7d']:+.3f}%")
-                if parts:
-                    trend_lines = f"\n📊 Trend: {' | '.join(parts)}"
+    # ── Morning Message ─────────────────────────────────────────
+    # Send once per day during the morning window (6am–2pm BKK), gated by its
+    # own `morning_sent` flag — NOT by the "first run of the day" check above.
+    #
+    # Why: the cron's last UTC hours fall after midnight BKK (e.g. 17:00 UTC =
+    # 00:00 BKK the next day). Those overnight runs used to consume the
+    # first-run slot — setting open_price at hour 0, outside the 6–14 window so
+    # no message — and the real 7am run then saw open_price already set and
+    # skipped the morning message entirely. Decoupling fixes that; the cron was
+    # also tightened so open_price anchors at the true morning price.
+    if 6 <= hour <= 14 and not state.get("morning_sent"):
+        # Include trend if we have history
+        trend_lines = ""
+        if len(history) >= 24:
+            trend = predictor.get_trend_summary(history)
+            parts = []
+            if "change_24h" in trend:
+                parts.append(f"24h: {trend['change_24h']:+.3f}%")
+            if "change_7d" in trend:
+                parts.append(f"7d: {trend['change_7d']:+.3f}%")
+            if parts:
+                trend_lines = f"\n📊 Trend: {' | '.join(parts)}"
 
-            # Quick TA signal
-            ta_line = ""
-            if len(history) >= 14:
-                ta = predictor.analyze(history)
-                if ta.get("overall_signal"):
-                    ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
+        # Quick TA signal
+        ta_line = ""
+        if len(history) >= 14:
+            ta = predictor.analyze(history)
+            if ta.get("overall_signal"):
+                ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
 
-            gb = gold_breakdown(thb_gram)
-            notify(
-                f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
-                f"📅 {time_str} (BKK)\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🥇 <b>99.99% (Pure)</b>\n"
-                f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
-                f"  1g: {fmt(gb['gram_9999'])}\n"
-                f"🥈 <b>96.50%</b>\n"
-                f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
-                f"  1g: {fmt(gb['gram_9650'])}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🌐 Spot     : ${usd_oz}/oz\n"
-                f"💱 Rate     : 1 USD = {thb_rate} THB\n"
-                f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
-                f"{trend_lines}{ta_line}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"✅ Monitoring စပြီ!"
-            )
-            # Don't return — continue to check evening summary and alerts below
-        # If first run is not morning (e.g. Sunday evening), skip morning msg
-        # but continue to check evening summary below
+        gb = gold_breakdown(thb_gram)
+        notify(
+            f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
+            f"📅 {time_str} (BKK)\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🥇 <b>99.99% (Pure)</b>\n"
+            f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
+            f"  1g: {fmt(gb['gram_9999'])}\n"
+            f"🥈 <b>96.50%</b>\n"
+            f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
+            f"  1g: {fmt(gb['gram_9650'])}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🌐 Spot     : ${usd_oz}/oz\n"
+            f"💱 Rate     : 1 USD = {thb_rate} THB\n"
+            f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
+            f"{trend_lines}{ta_line}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"✅ Monitoring စပြီ!"
+        )
+        state["morning_sent"] = True
+        storage.save_day_state(state)
 
     # ── Update Day Stats ────────────────────────────────────────
     state["day_low"] = min(state["day_low"], thb_gram)
