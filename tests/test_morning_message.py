@@ -79,7 +79,10 @@ def test_morning_sends_on_fresh_7am(harness):
     assert _is_morning(run_at(11, 7, 0))
 
 
-def test_evening_still_sends(harness):
+def test_evening_sends_at_8pm_not_5pm(harness):
     run_at, _ = harness
     run_at(10, 7, 0)
+    # 5pm must NOT trigger the evening summary anymore...
+    assert not _is_evening(run_at(10, 17, 0))
+    # ...8pm does.
     assert _is_evening(run_at(10, 20, 0))

@@ -244,8 +244,8 @@ def main():
         for level in RISE_LEVELS:
             state[level["key"]] = False
 
-    # ── Evening Summary (5pm–midnight BKK, very wide window for GitHub Actions)
-    if 17 <= hour <= 23 and not state["evening_sent"]:
+    # ── Evening Summary (8pm BKK; window to 11:55pm absorbs Actions delays) ──
+    if 20 <= hour <= 23 and not state["evening_sent"]:
         change = -d
         arrow = "📈" if change > 0 else "📉"
 
