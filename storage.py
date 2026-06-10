@@ -3,6 +3,8 @@ GitHub Gist-based persistent storage for Gold Monitor.
 Stores: price history, buy logs, model state, bot update offset.
 """
 
+from __future__ import annotations
+
 import requests
 import json
 import os

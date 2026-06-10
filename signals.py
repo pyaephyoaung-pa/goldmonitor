@@ -18,29 +18,57 @@ run, adjust SYMBOLS to match Stooq's catalogue. Everything degrades gracefully:
 a failed fetch simply omits that metric (and the block) rather than erroring.
 """
 
+from __future__ import annotations
+
 import requests
 
-# Stooq tickers. Tweak here if Stooq renames one.
+# Stooq primary tickers (kept for reference).
 SYMBOLS = {
     "dxy": "^dxy",    # US Dollar Index
     "us10y": "^tnx",  # US 10Y yield index
     "vix": "^vix",    # CBOE Volatility Index
 }
 
+# Stooq ticker names vary, so we try several candidates per metric until one
+# returns data. If a metric is still missing in a live run, find a working
+# ticker with `python signals.py` (diagnose) and pin it at the front here.
+SYMBOL_CANDIDATES = {
+    "dxy": ["^dxy", "dx.f", "usdidx"],   # dollar index / futures
+    "us10y": ["^tnx", "10usy.b"],        # 10Y yield index / bond yield
+    "vix": ["^vix"],                     # volatility index
+}
+
+# Yahoo Finance — PRIMARY source (keyless, reliable). Stooq blocks many CI/
+# automated clients, so it is only a secondary fallback below.
+YAHOO_SYMBOLS = {
+    "dxy": ["DX-Y.NYB"],   # ICE US Dollar Index
+    "us10y": ["^TNX"],     # 10Y yield, already in percent (e.g. 4.53 = 4.53%)
+    "vix": ["^VIX"],       # CBOE Volatility Index
+}
+
+# Stooq returns an EMPTY body to clients without a browser-like User-Agent —
+# the most common cause of "macro data unavailable". Always send one.
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; GoldMonitor/1.0)"}
+
 
 def _fetch_stooq_closes(symbol: str) -> list:
     """Return chronological list of daily closes for a Stooq symbol ([] on error)."""
     try:
+        # Pass the symbol via params so '^' is URL-encoded correctly.
         r = requests.get(
-            f"https://stooq.com/q/d/l/?s={symbol}&i=d", timeout=10
+            "https://stooq.com/q/d/l/",
+            params={"s": symbol, "i": "d"},
+            headers=_HEADERS,
+            timeout=10,
         )
         r.raise_for_status()
         text = r.text.strip()
-        # Expect CSV: Date,Open,High,Low,Close,Volume
-        if not text or "Close" not in text.splitlines()[0]:
+        lines = text.splitlines()
+        # Expect CSV header: Date,Open,High,Low,Close,Volume
+        if not lines or "Close" not in lines[0]:
             return []
         closes = []
-        for line in text.splitlines()[1:]:
+        for line in lines[1:]:
             cols = line.split(",")
             if len(cols) < 5:
                 continue
@@ -57,22 +85,66 @@ def _fetch_stooq_closes(symbol: str) -> list:
         return []
 
 
-def fetch_macro() -> dict:
-    """Fetch latest value + daily % change for each macro symbol.
+def _fetch_yahoo_closes(symbol: str) -> list:
+    """Return chronological daily closes from Yahoo Finance ([] on error)."""
+    try:
+        r = requests.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            params={"interval": "1d", "range": "5d"},
+            headers=_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        result = r.json()["chart"]["result"][0]
+        closes = result["indicators"]["quote"][0]["close"]
+        return [round(float(c), 4) for c in closes if c is not None]
+    except Exception as e:  # noqa: BLE001
+        print(f"[signals] yahoo fetch failed for {symbol}: {e}")
+        return []
 
-    Returns {key: {"value": float, "change_pct": float|None}} for whatever
-    succeeded (missing/failed symbols are simply absent).
+
+def _closes_for(key: str) -> tuple:
+    """Try Yahoo (reliable) first, then Stooq; return (source_symbol, closes).
+
+    Yahoo is primary because Stooq's CSV endpoint blocks many automated/CI
+    clients (returns an empty body). Stooq stays as a secondary fallback.
+    """
+    for sym in YAHOO_SYMBOLS.get(key, []):
+        closes = _fetch_yahoo_closes(sym)
+        if closes:
+            return f"yahoo:{sym}", closes
+    for sym in SYMBOL_CANDIDATES.get(key, [SYMBOLS.get(key, "")]):
+        if not sym:
+            continue
+        closes = _fetch_stooq_closes(sym)
+        if closes:
+            return sym, closes
+    return None, []
+
+
+def fetch_macro() -> dict:
+    """Fetch latest value + daily change for each macro metric.
+
+    Returns {key: {"value", "change_pct", "change_abs", "symbol"}} for whatever
+    succeeded (missing/failed metrics are simply absent). `change_abs` is the
+    raw daily delta — used to show yields in percentage points (pp).
     """
     out = {}
-    for key, sym in SYMBOLS.items():
-        closes = _fetch_stooq_closes(sym)
+    for key in YAHOO_SYMBOLS:
+        sym, closes = _closes_for(key)
         if not closes:
             continue
         latest = round(closes[-1], 2)
-        change_pct = None
+        change_pct = change_abs = None
         if len(closes) >= 2 and closes[-2]:
             change_pct = round((closes[-1] - closes[-2]) / closes[-2] * 100, 2)
-        out[key] = {"value": latest, "change_pct": change_pct}
+            change_abs = round(closes[-1] - closes[-2], 2)
+        out[key] = {
+            "value": latest,
+            "change_pct": change_pct,
+            "change_abs": change_abs,
+            "symbol": sym,
+        }
     return out
 
 
@@ -140,6 +212,15 @@ def _line(emoji, label, metric):
     return f"  {emoji} {label}: {val}{chg_str} {_arrow(chg)}"
 
 
+def _line_yield(emoji, label, metric):
+    """Yields read as a level in percent with the daily move in pp (bps)."""
+    val = metric.get("value")
+    abs_chg = metric.get("change_abs")
+    if abs_chg is not None:
+        return f"  {emoji} {label}: {val}% ({abs_chg:+.2f}pp) {_arrow(abs_chg)}"
+    return f"  {emoji} {label}: {val}% {_arrow(None)}"
+
+
 def format_macro_block(macro: dict | None = None) -> str:
     """Build the 'Macro & Fear' message block. Fetches if `macro` is None.
 
@@ -159,7 +240,7 @@ def format_macro_block(macro: dict | None = None) -> str:
     if "dxy" in macro:
         lines.append(_line("💵", "DXY", macro["dxy"]))
     if "us10y" in macro:
-        lines.append(_line("🏦", "US10Y", macro["us10y"]))
+        lines.append(_line_yield("🏦", "US10Y", macro["us10y"]))
     if "vix" in macro:
         lines.append(_line("😱", "VIX", macro["vix"]))
 
@@ -173,3 +254,28 @@ def format_macro_block(macro: dict | None = None) -> str:
 
     # Only return a block if we have more than just the header.
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def diagnose():
+    """Print which Stooq tickers actually return data.
+
+    Run `python signals.py` from a machine with internet access to find the
+    working tickers, then pin them at the front of SYMBOL_CANDIDATES.
+    """
+    print("Stooq:")
+    for key, cands in SYMBOL_CANDIDATES.items():
+        for sym in cands:
+            closes = _fetch_stooq_closes(sym)
+            status = f"OK ({len(closes)} pts, last={closes[-1]})" if closes else "no data"
+            print(f"  {key:6} {sym:10} -> {status}")
+    print("Yahoo (fallback):")
+    for key, cands in YAHOO_SYMBOLS.items():
+        for sym in cands:
+            closes = _fetch_yahoo_closes(sym)
+            status = f"OK ({len(closes)} pts, last={closes[-1]})" if closes else "no data"
+            print(f"  {key:6} {sym:12} -> {status}")
+    print("\nfetch_macro() ->", fetch_macro())
+
+
+if __name__ == "__main__":
+    diagnose()

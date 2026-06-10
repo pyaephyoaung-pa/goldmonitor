@@ -15,6 +15,8 @@ NOTE: the fallback endpoints could not be reached from the build sandbox
 once in the live GitHub Actions environment.
 """
 
+from __future__ import annotations
+
 import os
 import time
 

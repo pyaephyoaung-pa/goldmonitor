@@ -11,13 +11,20 @@
           "goldapi.py",
           "gold_format.py",
           "bot_core.py",
+          "signals.py",
           "api/webhook.py"
         ]
       }
     }
   ],
   "routes": [
-    { "src": "/api/webhook", "dest": "/api/webhook.py" },
-    { "src": "/(.*)", "dest": "/api/webhook.py" }
+    {
+      "src": "/api/webhook",
+      "dest": "/api/webhook.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/webhook.py"
+    }
   ]
 }

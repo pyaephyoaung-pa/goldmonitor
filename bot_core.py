@@ -11,6 +11,8 @@ webhook) — are now thin wrappers around dispatch_update() here. Previously eac
 held its own ~400-line copy of these handlers, which drifted out of sync.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import html as html_module
