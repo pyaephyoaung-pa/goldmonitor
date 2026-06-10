@@ -5,13 +5,23 @@ on:
     # NOTE: UTC. BKK = UTC+7. We stop at 16 UTC (= 23:00-23:55 BKK) on purpose:
     # 17 UTC would be 00:00-00:55 BKK the *next* day, which used to steal the
     # first-run-of-day slot and suppress the morning message.
-    - cron: "*/5 0-16 * * 1-5"  # Mon-Fri: every 5min, 07:00-23:55 BKK
-    - cron: "*/5 0-16 * * 6"    # Sat:     every 5min, 07:00-23:55 BKK
-    - cron: "*/5 10-16 * * 0"   # Sun:     every 5min, 17:00-23:55 BKK
+    #
+    # */15 (was */5): each run costs ~1 billable minute, so */5 burned
+    # ~6,000 min/month — well past the 2,000 free minutes on private repos.
+    # */15 is ~2,000/month and still plenty for %-from-open alerts.
+    - cron: "*/15 0-16 * * 1-5"  # Mon-Fri: every 15min, 07:00-23:55 BKK
+    - cron: "*/15 0-16 * * 6"    # Sat:     every 15min, 07:00-23:55 BKK
+    - cron: "*/15 10-16 * * 0"   # Sun:     every 15min, 17:00-23:55 BKK
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Never let two monitor runs overlap — overlapping runs race on the shared
+# Gist (read-modify-write) and can clobber each other's state/alert flags.
+concurrency:
+  group: gold-monitor
+  cancel-in-progress: false
 
 jobs:
   monitor:
@@ -24,6 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip  # restore wheels from cache — big per-run time saver
 
       - name: Install dependencies
         run: pip install -r requirements.txt

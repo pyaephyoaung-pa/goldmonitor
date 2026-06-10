@@ -522,6 +522,101 @@ def predict(history: list, model_data: dict) -> dict:
     return result
 
 
+# ── Prediction Accuracy Tracker ─────────────────────────────────
+# Every recorded ML prediction is later scored against what the price actually
+# did, giving a LIVE hit-rate — far more meaningful than backtest numbers.
+
+PREDICTION_LOG_CAP = 300  # keep the Gist file bounded
+
+
+def record_predictions(model_data: dict, prediction: dict, current_price: float,
+                       now_iso: str | None = None) -> dict:
+    """Append the current ML predictions to model_data["predictions"]."""
+    preds = model_data.setdefault("predictions", [])
+    if now_iso is None:
+        now_iso = datetime.now().astimezone().isoformat()
+    for horizon, p in (prediction.get("predictions") or {}).items():
+        if "direction" not in p:
+            continue
+        try:
+            hours = int(horizon.rstrip("h"))
+        except ValueError:
+            continue
+        preds.append({
+            "ts": now_iso,
+            "horizon": horizon,
+            "hours": hours,
+            "direction": p["direction"],
+            "price_at": current_price,
+            "confidence": p.get("confidence"),
+            "resolved": False,
+        })
+    model_data["predictions"] = preds[-PREDICTION_LOG_CAP:]
+    return model_data
+
+
+def resolve_predictions(model_data: dict, history: list) -> bool:
+    """Score matured predictions against actual prices. Returns True if changed.
+
+    A prediction matures `hours` after it was made; the first history point at
+    or after that target decides UP/DOWN. If the nearest data point is too far
+    past the target (data gap > 6h), the prediction is voided, not scored.
+    """
+    preds = model_data.get("predictions", [])
+    if not preds or not history:
+        return False
+
+    hist = []
+    for h in history:
+        try:
+            hist.append((datetime.fromisoformat(h["ts"]), h["thb_gram"]))
+        except (KeyError, ValueError, TypeError):
+            continue
+    if not hist:
+        return False
+
+    changed = False
+    for p in preds:
+        if p.get("resolved"):
+            continue
+        try:
+            t0 = datetime.fromisoformat(p["ts"])
+        except (KeyError, ValueError, TypeError):
+            p["resolved"] = True
+            p["void"] = True
+            changed = True
+            continue
+        target = t0 + timedelta(hours=p.get("hours", 24))
+        future = [(t, price) for t, price in hist if t >= target]
+        if not future:
+            continue  # not matured yet
+        t_actual, price_actual = future[0]
+        p["resolved"] = True
+        changed = True
+        if (t_actual - target) > timedelta(hours=6):
+            p["void"] = True  # data gap too large to score fairly
+            continue
+        actual_dir = "UP" if price_actual >= p["price_at"] else "DOWN"
+        p["actual"] = actual_dir
+        p["actual_price"] = price_actual
+        p["correct"] = (actual_dir == p["direction"])
+    return changed
+
+
+def prediction_hit_rates(model_data: dict) -> dict:
+    """Live accuracy per horizon: {horizon: {"n", "correct", "hit_pct"}}."""
+    out = {}
+    for p in model_data.get("predictions", []):
+        if not p.get("resolved") or p.get("void") or "correct" not in p:
+            continue
+        s = out.setdefault(p.get("horizon", "?"), {"n": 0, "correct": 0})
+        s["n"] += 1
+        s["correct"] += 1 if p["correct"] else 0
+    for s in out.values():
+        s["hit_pct"] = round(s["correct"] / s["n"] * 100, 1) if s["n"] else None
+    return out
+
+
 # ── Trend Analysis ──────────────────────────────────────────────
 
 def get_trend_summary(history: list) -> dict:
@@ -690,6 +785,16 @@ def format_prediction_message(prediction: dict) -> str:
 
         if prediction.get("ml_has_edge") is False:
             lines.append("  ⚠️ No model beats a coin-flip out-of-sample — ML is noise here.")
+
+    # Live (real-world) hit-rate from the prediction tracker
+    rates = prediction.get("hit_rates") or {}
+    scored = {h: s for h, s in rates.items() if s.get("n")}
+    if scored:
+        parts = [
+            f"{h}: {s['hit_pct']}% (n={s['n']})"
+            for h, s in sorted(scored.items())
+        ]
+        lines.append(f"🎯 Live hit-rate: {' | '.join(parts)}")
 
     # Final Outlook
     lines.append("━━━━━━━━━━━━━━━")

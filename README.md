@@ -24,11 +24,19 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | Command | Description |
 |---|---|
 | `/price` | 💰 လက်ရှိ ရွှေဈေး + quick TA |
-| `/predict` | 🔮 4h/12h/24h ခန့်မှန်းချက် |
+| `/predict` | 🔮 4h/12h/24h ခန့်မှန်းချက် + live hit-rate |
+| `/chart [N]` | 📊 N-day ဈေး chart ပုံ (default 7, max 30) |
+| `/alert above\|below <THB>` | 🎯 ဈေးအဆင့်ရောက်ရင် one-shot alert (max 5) |
+| `/alerts` | 📋 သင့် price alerts စာရင်း |
+| `/delalert <#>` | 🗑 Price alert ဖျက်ပါ |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
 | `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
 | `/unsubscribe` | 🔕 Alerts ရပ်ပါ |
-| `/help` | ❓ Commands အားလုံး |
+| `/settings` | ⚙️ Notification settings ကြည့်ပါ |
+| `/mute morning\|evening\|alerts` | 🔕 Category တစ်ခု ပိတ်ပါ |
+| `/unmute morning\|evening\|alerts` | 🔔 ပြန်ဖွင့်ပါ |
+| `/quiet 22-7` | 🤫 Quiet hours (BKK) — `/quiet off` ဖြင့် ပိတ်ပါ |
+| `/help` | ❓ Commands အားလုံး + tap-able buttons |
 
 ### 🔒 Owner-Only Commands (bot owner သီးသန့်)
 
@@ -42,7 +50,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/setthreshold N` | ⚙️ Drop alert % ပြောင်းပါ |
 | `/setrisethreshold N` | 📈 Rise alert % ပြောင်းပါ |
 
-Commands are checked every **5 minutes** via GitHub Actions + **instant via webhook**.
+Commands reply **instantly via webhook** (primary); the Actions poller is a fallback that checks every **15 minutes**. `/help` and `/start` show **inline buttons** — tap instead of typing.
 
 ---
 
@@ -52,6 +60,13 @@ Commands are checked every **5 minutes** via GitHub Actions + **instant via webh
 |---|---|
 | မနက် (first run) | 🌅 Open ဈေး + trend + TA signal |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
+| တနင်္ဂနွေ ညနေ | 📅 Weekly recap (week change, high/low, best/worst day) |
+
+> 🔄 Price checks run every **15 minutes** (07:00–23:55 BKK) — `*/5` was cut to
+> `*/15` + pip caching + a concurrency guard to stay inside GitHub's free
+> Actions minutes and stop overlapping runs racing on the Gist.
+> ⚙️ Subscribers can `/mute` categories or set `/quiet 22-7` hours — alerts
+> respect each user's preferences.
 
 **Drop Alerts (5 levels, threshold = 0.5% default):**
 
@@ -136,6 +151,16 @@ GradientBoosting classifier trained on historical features. Predicts price direc
 Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the combined outlook tells you to ignore ML and rely on the TA signal. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
 
 Both signals are combined for a final outlook in alerts and the `/predict` command.
+
+**Live accuracy tracking:** every evening the bot records its ML predictions, then
+scores them once they mature (4h/12h/24h later) against the actual price. The real
+hit-rate appears in `/predict` and the evening summary — so you can see whether the
+models work in the real world, not just in backtests.
+
+**Reliability:** price history is stored hourly (alert checks still run every 5
+minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert instead
+of silent failure; Telegram rate limits (429) are respected with retry; owner
+commands fail closed if `TELEGRAM_CHAT_ID` is unset.
 
 ---
 

@@ -22,6 +22,7 @@ DAY_STATE_FILE = "day_state.json"
 BOT_STATE_FILE = "bot_state.json"
 MODEL_DATA_FILE = "model_data.json"
 SUBSCRIBERS_FILE = "subscribers.json"
+LEVEL_ALERTS_FILE = "level_alerts.json"
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
@@ -96,8 +97,28 @@ def _write_files(file_dict: dict):
 
 
 # ── Price History ───────────────────────────────────────────────
+
+# The analytics layer (trend windows, ML horizons, the 720-point/30-day cap)
+# assumes ONE price point per HOUR. The monitor cron fires every 5 minutes for
+# alert responsiveness, so appends must be throttled to hourly here — otherwise
+# "24h change" would really be a 2-hour change and the history cap ~2.5 days.
+MIN_APPEND_INTERVAL_MIN = 55
+
+
+def _minutes_since_last(history: list, now: datetime) -> float | None:
+    """Minutes since the newest stored point (None if empty/unparseable)."""
+    if not history:
+        return None
+    try:
+        last_ts = datetime.fromisoformat(history[-1]["ts"])
+        return (now - last_ts).total_seconds() / 60.0
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
-    """Append a price data point. Keep last 720 entries (~30 days hourly).
+    """Append a price data point at most once per hour. Keep last 720 entries
+    (~30 days hourly).
 
     Best-effort concurrency guard: the Gist is a shared store with no locking,
     so two overlapping runs could each read, append, and overwrite each other —
@@ -118,6 +139,13 @@ def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
 
     # Re-read immediately before writing to pick up any concurrent appends.
     history = _read_file(PRICE_HISTORY_FILE)
+
+    # Hourly throttle: skip the append (but still return current history) if
+    # the newest point is fresher than MIN_APPEND_INTERVAL_MIN.
+    mins = _minutes_since_last(history, now)
+    if mins is not None and 0 <= mins < MIN_APPEND_INTERVAL_MIN:
+        return history
+
     seen_ts = {h.get("ts") for h in history}
     if entry["ts"] not in seen_ts:
         history.append(entry)
@@ -350,12 +378,153 @@ def add_subscriber(chat_id: str) -> bool:
 
 def remove_subscriber(chat_id: str) -> bool:
     """Remove a subscriber. Returns True if removed, False if not found."""
+    data = _read_file(SUBSCRIBERS_FILE)
     subs = get_subscribers()
     if chat_id not in subs:
         return False
     subs.remove(chat_id)
-    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs})
+    prefs = data.get("prefs", {}) if isinstance(data, dict) else {}
+    prefs.pop(str(chat_id), None)
+    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs, "prefs": prefs})
     return True
+
+
+# ── Per-user notification preferences ───────────────────────────
+# Stored alongside subscribers: {"chat_ids": [...], "prefs": {chat_id: {...}}}
+# Categories: "morning", "evening", "alerts" (drop/rise broadcasts).
+# "quiet" is "HH-HH" (BKK hours, suppress from first up to second) or None.
+
+PREF_DEFAULTS = {"morning": True, "evening": True, "alerts": True, "quiet": None}
+PREF_CATEGORIES = ("morning", "evening", "alerts")
+
+
+def get_user_prefs(chat_id: str) -> dict:
+    data = _read_file(SUBSCRIBERS_FILE)
+    prefs = data.get("prefs", {}) if isinstance(data, dict) else {}
+    return {**PREF_DEFAULTS, **prefs.get(str(chat_id), {})}
+
+
+def set_user_pref(chat_id: str, key: str, value) -> dict:
+    """Set one preference key for a user; returns their full prefs."""
+    data = _read_file(SUBSCRIBERS_FILE)
+    if not isinstance(data, dict):
+        data = {"chat_ids": data if isinstance(data, list) else []}
+    prefs = data.setdefault("prefs", {})
+    user = prefs.setdefault(str(chat_id), {})
+    user[key] = value
+    _write_file(SUBSCRIBERS_FILE, data)
+    return {**PREF_DEFAULTS, **user}
+
+
+def parse_quiet_hours(spec: str) -> tuple | None:
+    """Parse 'HH-HH' (e.g. '22-7') into (start, end) hours, or None if invalid."""
+    m = spec.strip().split("-")
+    if len(m) != 2:
+        return None
+    try:
+        start, end = int(m[0]), int(m[1])
+    except ValueError:
+        return None
+    if not (0 <= start <= 23 and 0 <= end <= 23) or start == end:
+        return None
+    return start, end
+
+
+def in_quiet_hours(quiet: str | None, hour: int) -> bool:
+    """True if `hour` falls inside the user's quiet window (handles wrap)."""
+    if not quiet:
+        return False
+    parsed = parse_quiet_hours(quiet)
+    if parsed is None:
+        return False
+    start, end = parsed
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end  # wraps midnight, e.g. 22-7
+
+
+def get_all_prefs() -> dict:
+    """All users' prefs in one read (avoid per-recipient Gist round-trips)."""
+    data = _read_file(SUBSCRIBERS_FILE)
+    return data.get("prefs", {}) if isinstance(data, dict) else {}
+
+
+def prefs_allow(user_prefs: dict, category: str, hour: int) -> bool:
+    """Pure check: do these prefs allow a `category` broadcast at BKK `hour`?"""
+    merged = {**PREF_DEFAULTS, **(user_prefs or {})}
+    if category in PREF_CATEGORIES and not merged.get(category, True):
+        return False
+    return not in_quiet_hours(merged.get("quiet"), hour)
+
+
+# ── Price-level Alerts (per-user, one-shot) ────────────────────
+MAX_ALERTS_PER_USER = 5
+
+
+def get_level_alerts() -> dict:
+    """All level alerts: {chat_id: [{"dir", "price", "created"}, ...]}."""
+    data = _read_file(LEVEL_ALERTS_FILE)
+    return data if isinstance(data, dict) else {}
+
+
+def get_user_alerts(chat_id: str) -> list:
+    return get_level_alerts().get(str(chat_id), [])
+
+
+def add_level_alert(chat_id: str, direction: str, price: float) -> bool:
+    """Add a one-shot level alert. Returns False if user hit the limit."""
+    alerts = get_level_alerts()
+    user_alerts = alerts.get(str(chat_id), [])
+    if len(user_alerts) >= MAX_ALERTS_PER_USER:
+        return False
+    user_alerts.append({
+        "dir": direction,
+        "price": round(price, 2),
+        "created": datetime.now(BANGKOK_TZ).isoformat(),
+    })
+    alerts[str(chat_id)] = user_alerts
+    _write_file(LEVEL_ALERTS_FILE, alerts)
+    return True
+
+
+def remove_level_alert(chat_id: str, index: int) -> dict | None:
+    """Remove a user's alert by 1-based index. Returns removed alert or None."""
+    alerts = get_level_alerts()
+    user_alerts = alerts.get(str(chat_id), [])
+    if index < 1 or index > len(user_alerts):
+        return None
+    removed = user_alerts.pop(index - 1)
+    if user_alerts:
+        alerts[str(chat_id)] = user_alerts
+    else:
+        alerts.pop(str(chat_id), None)
+    _write_file(LEVEL_ALERTS_FILE, alerts)
+    return removed
+
+
+def pop_triggered_alerts(current_price: float) -> list:
+    """Return [(chat_id, alert), ...] whose level was crossed; remove them.
+
+    One-shot semantics: a triggered alert fires once and is deleted.
+    """
+    alerts = get_level_alerts()
+    triggered, remaining = [], {}
+    for chat_id, user_alerts in alerts.items():
+        keep = []
+        for a in user_alerts:
+            crossed = (
+                (a.get("dir") == "above" and current_price >= a.get("price", 0)) or
+                (a.get("dir") == "below" and current_price <= a.get("price", 0))
+            )
+            if crossed:
+                triggered.append((chat_id, a))
+            else:
+                keep.append(a)
+        if keep:
+            remaining[chat_id] = keep
+    if triggered:
+        _write_file(LEVEL_ALERTS_FILE, remaining)
+    return triggered
 
 
 # ── Utility: create Gist if not exists ──────────────────────────

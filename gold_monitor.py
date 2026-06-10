@@ -16,6 +16,8 @@ gold_format.py and bot_core.py so it is not duplicated here.
 """
 
 import os
+import time
+import traceback
 from datetime import datetime
 import pytz
 
@@ -46,9 +48,11 @@ except Exception:
 
 # ── Telegram Notify ─────────────────────────────────────────────
 
-def notify(msg: str):
-    """Send message to owner + all subscribers.
+def notify(msg: str, category: str = "alerts"):
+    """Send message to owner + all subscribers, honoring per-user preferences.
 
+    `category` is one of "morning" / "evening" / "alerts" — users can mute
+    categories (/mute) or set quiet hours (/quiet); both are checked here.
     Uses the shared bot_core.send_message; auto-removes subscribers who have
     blocked the bot (Telegram error_code 403).
     """
@@ -64,7 +68,19 @@ def notify(msg: str):
         if sub_id != TG_CHAT_ID:  # avoid duplicate if owner subscribed
             recipients.append(sub_id)
 
-    for chat_id in recipients:
+    # One Gist read for everyone's prefs, then filter.
+    all_prefs = storage.get_all_prefs()
+    hour = datetime.now(BANGKOK_TZ).hour
+    skipped = [c for c in recipients
+               if not storage.prefs_allow(all_prefs.get(str(c), {}), category, hour)]
+    recipients = [c for c in recipients if c not in skipped]
+    if skipped:
+        print(f"[notify] {len(skipped)} recipient(s) skipped by prefs ({category})")
+
+    for i, chat_id in enumerate(recipients):
+        # Telegram broadcast limit is ~30 msg/s — pace sends to stay well under.
+        if i:
+            time.sleep(0.1)
         resp = bot_core.send_message(msg, chat_id)
         if resp and not resp.get("ok") and resp.get("error_code") == 403:
             print(f"[Telegram] Removing blocked subscriber: {chat_id}")
@@ -79,6 +95,46 @@ def drop_pct(open_p, cur):
 
 def rise_pct(open_p, cur):
     return ((cur - open_p) / open_p) * 100
+
+
+def build_weekly_block(history: list) -> str:
+    """Weekly recap appended to the SUNDAY evening summary.
+
+    Computed from the hourly price history: week change, range, and the
+    best/worst day by daily close-over-open move. Returns "" if there is not
+    enough data (needs ≥ 2 distinct days in the last 7d window).
+    """
+    points = history[-168:]  # last 7 days of hourly points
+    if len(points) < 24:
+        return ""
+
+    daily = {}
+    for h in points:
+        if "thb_gram" not in h or "ts" not in h:
+            continue
+        daily.setdefault(h["ts"][:10], []).append(h["thb_gram"])
+    if len(daily) < 2:
+        return ""
+
+    prices = [p for day in daily.values() for p in day]
+    week_open, week_close = prices[0], prices[-1]
+    week_change = ((week_close - week_open) / week_open) * 100 if week_open else 0
+
+    day_moves = {}
+    for date, day_prices in daily.items():
+        if day_prices[0]:
+            day_moves[date] = ((day_prices[-1] - day_prices[0]) / day_prices[0]) * 100
+    best = max(day_moves, key=day_moves.get)
+    worst = min(day_moves, key=day_moves.get)
+
+    arrow = "📈" if week_change >= 0 else "📉"
+    return (
+        f"\n\n📅 <b>သီတင်းပတ် အနှစ်ချုပ် (7d)</b>\n"
+        f"  {arrow} Week: {week_change:+.2f}% ({fmt(week_open)} → {fmt(week_close)})\n"
+        f"  ⬆️ High: {fmt(max(prices))} | ⬇️ Low: {fmt(min(prices))}\n"
+        f"  🏆 Best day: {best[5:]} ({day_moves[best]:+.2f}%)\n"
+        f"  💔 Worst day: {worst[5:]} ({day_moves[worst]:+.2f}%)"
+    )
 
 
 # ── Main Monitor ────────────────────────────────────────────────
@@ -166,16 +222,33 @@ def main():
             f"{trend_lines}{ta_line}"
             f"{macro_lines}\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"✅ Monitoring စပြီ!"
+            f"✅ Monitoring စပြီ!",
+            "morning",
         )
         state["morning_sent"] = True
         storage.save_day_state(state)
 
     # ── Update Day Stats ────────────────────────────────────────
-    state["day_low"] = min(state["day_low"], thb_gram)
-    state["day_high"] = max(state["day_high"], thb_gram)
+    # .get(...) or thb_gram: tolerate older day_state schemas missing keys.
+    state["day_low"] = min(state.get("day_low") or thb_gram, thb_gram)
+    state["day_high"] = max(state.get("day_high") or thb_gram, thb_gram)
     d = drop_pct(state["open_price"], thb_gram)
     print(f"  Drop from open: {d:+.2f}%")
+
+    # ── Per-user Price-level Alerts (one-shot, set via /alert) ──
+    for chat_id, alert in storage.pop_triggered_alerts(thb_gram):
+        arrow = "⬆️" if alert["dir"] == "above" else "⬇️"
+        bot_core.send_message(
+            f"🎯 <b>Price Alert ထိပြီ!</b>\n"
+            f"⏰ {time_str}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"{arrow} သတ်မှတ်ချက်: {alert['dir']} {fmt(alert['price'])}/g\n"
+            f"💰 လက်ရှိဈေး : {fmt(thb_gram)}/g\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"ℹ️ ဤ alert ကို auto ဖျက်ပြီးပါပြီ — /alert ဖြင့် အသစ်သတ်မှတ်နိုင်ပါသည်",
+            chat_id,
+        )
+        print(f"  Level alert fired: {chat_id} {alert['dir']} {alert['price']}")
 
     # ── Multi-timeframe Analysis ────────────────────────────────
     ta = predictor.analyze(history) if len(history) >= 14 else {}
@@ -251,7 +324,7 @@ def main():
             state[level["key"]] = False
 
     # ── Evening Summary (8pm BKK; window to 11:55pm absorbs Actions delays) ──
-    if 20 <= hour <= 23 and not state["evening_sent"]:
+    if 20 <= hour <= 23 and not state.get("evening_sent"):
         change = -d
         arrow = "📈" if change > 0 else "📉"
 
@@ -276,14 +349,26 @@ def main():
             if parts:
                 trend_lines = f"\n📊 Trends: {' | '.join(parts)}"
 
-        # Prediction outlook
+        # Prediction outlook + accuracy tracking (record tonight's prediction,
+        # score matured ones so the bot reports its real hit-rate over time)
         predict_line = ""
         if len(history) >= 15:
             model_data = storage.load_model_data()
+            changed = predictor.resolve_predictions(model_data, history)
             pred = predictor.predict(history, model_data)
+            if pred.get("predictions"):
+                predictor.record_predictions(model_data, pred, thb_gram)
+                changed = True
+            if changed:
+                storage.save_model_data(model_data)
             outlook = pred.get("combined_outlook") or pred.get("ta_outlook", "")
             if outlook:
                 predict_line = f"\n🔮 Tomorrow: {outlook}"
+            rates = predictor.prediction_hit_rates(model_data)
+            scored = {h: s for h, s in rates.items() if s.get("n")}
+            if scored:
+                parts = [f"{h} {s['hit_pct']}%" for h, s in sorted(scored.items())]
+                predict_line += f"\n🎯 ML live hit-rate: {' | '.join(parts)}"
 
         # Streak info
         streak_line = ""
@@ -292,6 +377,9 @@ def main():
                 f"\n🔥 {trend['streak']}h consecutive "
                 f"{'rise' if trend['streak_direction'] == 'up' else 'decline'}"
             )
+
+        # Weekly recap — Sundays only
+        weekly_lines = build_weekly_block(history) if now.weekday() == 6 else ""
 
         # Macro & fear context (DXY / US10Y / VIX). Omitted if unavailable.
         macro_block = signals.format_macro_block()
@@ -308,8 +396,9 @@ def main():
             f"⬇️ Day Low   : {fmt(state['day_low'])}/g\n"
             f"🌐 Spot: ${usd_oz}/oz"
             f"{trend_lines}{streak_line}{portfolio_lines}{predict_line}"
-            f"{macro_lines}\n"
-            f"━━━━━━━━━━━━━━━"
+            f"{weekly_lines}{macro_lines}\n"
+            f"━━━━━━━━━━━━━━━",
+            "evening",
         )
         state["evening_sent"] = True
 
@@ -332,5 +421,28 @@ def main():
     print("  Done.")
 
 
+def run():
+    """Entry point with failure alerting.
+
+    If the monitor itself crashes (Gist outage, schema surprise, bug), tell the
+    owner instead of failing silently — otherwise alerts just stop and nobody
+    notices until it's too late.
+    """
+    try:
+        main()
+    except Exception as e:
+        print(f"[monitor] CRASH: {e}")
+        traceback.print_exc()
+        if TG_BOT_TOKEN and TG_CHAT_ID:
+            err = str(e)[:300]
+            bot_core.send_message(
+                f"🛑 <b>Gold Monitor crashed</b>\n"
+                f"<code>{type(e).__name__}: {err}</code>\n"
+                f"Check GitHub Actions logs.",
+                TG_CHAT_ID,
+            )
+        raise  # keep the Actions run red
+
+
 if __name__ == "__main__":
-    main()
+    run()

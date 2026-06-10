@@ -2,11 +2,17 @@ name: Telegram Bot Commands
 
 on:
   schedule:
-    - cron: "*/5 * * * *"    # Every 5 minutes, 24/7
+    # Polling is only the FALLBACK path (webhook gives instant replies and the
+    # poller self-disables when a webhook is set) — */15 keeps Actions cost low.
+    - cron: "*/15 * * * *"    # Every 15 minutes, 24/7
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: bot-commands
+  cancel-in-progress: false
 
 jobs:
   poll:
@@ -19,6 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt

@@ -27,7 +27,8 @@ def set_webhook(base_url: str):
 
     payload = {
         "url": webhook_url,
-        "allowed_updates": ["message"],
+        # callback_query is required for inline keyboard buttons to work
+        "allowed_updates": ["message", "callback_query"],
     }
     if secret:
         payload["secret_token"] = secret

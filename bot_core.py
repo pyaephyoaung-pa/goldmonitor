@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import html as html_module
 from datetime import datetime
 
@@ -34,9 +35,10 @@ TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ── Telegram I/O ────────────────────────────────────────────────
 
-def send_message(text: str, chat_id: str = "") -> dict | None:
+def send_message(text: str, chat_id: str = "", reply_markup: dict | None = None) -> dict | None:
     """Send a Telegram message (HTML), with a plain-text retry on parse errors.
 
+    `reply_markup` optionally attaches an inline keyboard.
     Returns the Telegram API response dict (or None on hard failure) so callers
     can react to error codes (e.g. 403 = bot blocked).
     """
@@ -44,16 +46,30 @@ def send_message(text: str, chat_id: str = "") -> dict | None:
     if not TG_BOT_TOKEN or not cid:
         print(f"[bot] No credentials. Message:\n{text}")
         return None
+    payload = {"chat_id": cid, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-            json={"chat_id": cid, "text": text, "parse_mode": "HTML"},
+            json=payload,
             timeout=10,
         )
         resp = r.json()
         if resp.get("ok"):
             return resp
         print(f"[bot] Telegram error: {resp.get('description')} (code={resp.get('error_code')})")
+        # 429 Too Many Requests — respect Telegram's retry_after and retry once.
+        if resp.get("error_code") == 429:
+            wait = min(resp.get("parameters", {}).get("retry_after", 1), 30)
+            print(f"[bot] Rate limited — retrying after {wait}s")
+            time.sleep(wait)
+            r = requests.post(
+                f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
+                json={"chat_id": cid, "text": text, "parse_mode": "HTML"},
+                timeout=10,
+            )
+            return r.json()
         # Retry without HTML parse_mode in case of a formatting error
         if resp.get("error_code") == 400:
             r2 = requests.post(
@@ -67,6 +83,42 @@ def send_message(text: str, chat_id: str = "") -> dict | None:
         return resp
     except Exception as e:
         print(f"[bot] Send error: {e}")
+        return None
+
+
+def answer_callback_query(callback_id: str):
+    """Ack a button press so Telegram stops showing the loading spinner."""
+    if not TG_BOT_TOKEN:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TG_BOT_TOKEN}/answerCallbackQuery",
+            json={"callback_query_id": callback_id},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[bot] answerCallbackQuery error: {e}")
+
+
+def send_photo(photo_url: str, caption: str, chat_id: str = "") -> dict | None:
+    """Send a photo by URL via Telegram sendPhoto."""
+    cid = chat_id or TG_CHAT_ID
+    if not TG_BOT_TOKEN or not cid:
+        print(f"[bot] No credentials. Photo: {photo_url}")
+        return None
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendPhoto",
+            json={"chat_id": cid, "photo": photo_url,
+                  "caption": caption, "parse_mode": "HTML"},
+            timeout=15,
+        )
+        resp = r.json()
+        if not resp.get("ok"):
+            print(f"[bot] sendPhoto error: {resp.get('description')}")
+        return resp
+    except Exception as e:
+        print(f"[bot] sendPhoto error: {e}")
         return None
 
 
@@ -163,9 +215,114 @@ def cmd_predict(chat_id: str):
         return
 
     model_data = storage.load_model_data()
+    # Score any matured predictions first so the hit-rate shown is current.
+    if predictor.resolve_predictions(model_data, history):
+        storage.save_model_data(model_data)
     prediction = predictor.predict(history, model_data)
+    prediction["hit_rates"] = predictor.prediction_hit_rates(model_data)
     msg = predictor.format_prediction_message(prediction)
     send_message(msg, chat_id)
+
+
+# ── /chart — price chart via QuickChart (no matplotlib dependency) ──
+
+QUICKCHART_CREATE_URL = "https://quickchart.io/chart/create"
+CHART_MAX_POINTS = 96  # downsample target so the config stays small
+
+
+def _downsample(items: list, max_points: int) -> list:
+    """Evenly thin a list to at most max_points, always keeping the last item."""
+    if len(items) <= max_points:
+        return items
+    step = len(items) / max_points
+    sampled = [items[int(i * step)] for i in range(max_points)]
+    if sampled[-1] is not items[-1]:
+        sampled[-1] = items[-1]
+    return sampled
+
+
+def build_chart_config(history: list, days: int) -> dict | None:
+    """Build a Chart.js config for the last `days` of price history."""
+    points = [h for h in history if "thb_gram" in h][-days * 24:]
+    if len(points) < 2:
+        return None
+    points = _downsample(points, CHART_MAX_POINTS)
+    labels = [p["ts"][5:16].replace("T", " ") for p in points]  # "MM-DD HH:MM"
+    prices = [p["thb_gram"] for p in points]
+    return {
+        "type": "line",
+        "data": {
+            "labels": labels,
+            "datasets": [{
+                "label": "THB/gram (99.99%)",
+                "data": prices,
+                "borderColor": "#d4a017",
+                "backgroundColor": "rgba(212,160,23,0.15)",
+                "fill": True,
+                "pointRadius": 0,
+                "borderWidth": 2,
+                "tension": 0.2,
+            }],
+        },
+        "options": {
+            "title": {"display": True, "text": f"Gold Price — last {days}d"},
+            "legend": {"display": False},
+            "scales": {
+                "xAxes": [{"ticks": {"maxTicksLimit": 8, "fontSize": 9}}],
+                "yAxes": [{"ticks": {"maxTicksLimit": 8}}],
+            },
+        },
+    }
+
+
+def _quickchart_short_url(config: dict) -> str | None:
+    """Create a short chart URL via QuickChart's create endpoint."""
+    try:
+        r = requests.post(
+            QUICKCHART_CREATE_URL,
+            json={"chart": config, "width": 800, "height": 420,
+                  "backgroundColor": "white"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if data.get("success") and data.get("url"):
+            return data["url"]
+    except Exception as e:
+        print(f"[bot] quickchart error: {e}")
+    return None
+
+
+def cmd_chart(chat_id: str, args: str):
+    try:
+        days = int(args.strip()) if args.strip() else 7
+    except ValueError:
+        days = 7
+    days = max(1, min(days, 30))
+
+    history = storage.get_price_history()
+    config = build_chart_config(history, days)
+    if config is None:
+        send_message("📊 Data collecting — not enough history for a chart yet", chat_id)
+        return
+
+    url = _quickchart_short_url(config)
+    if url is None:
+        send_message("⚠️ Chart service unavailable — ခဏနေ ပြန်စမ်းပါ", chat_id)
+        return
+
+    prices = [h["thb_gram"] for h in history[-days * 24:] if "thb_gram" in h]
+    change = ((prices[-1] - prices[0]) / prices[0]) * 100 if prices[0] else 0
+    arrow = "📈" if change >= 0 else "📉"
+    caption = (
+        f"📊 <b>ရွှေဈေး {days}-Day Chart</b>\n"
+        f"💰 Now: {fmt(prices[-1])}/g | {arrow} {change:+.2f}%\n"
+        f"⬆️ High: {fmt(max(prices))} | ⬇️ Low: {fmt(min(prices))}"
+    )
+    resp = send_photo(url, caption, chat_id)
+    if not resp or not resp.get("ok"):
+        # Fallback: at least give the user the link.
+        send_message(f"{caption}\n🔗 {url}", chat_id)
 
 
 def cmd_macro(chat_id: str):
@@ -445,6 +602,91 @@ def cmd_setrisethreshold(chat_id: str, args: str):
     )
 
 
+# ── Price-level alerts ──────────────────────────────────────────
+
+def cmd_alert(chat_id: str, args: str):
+    """/alert above 4500  |  /alert below 4200 — one-shot price-level alert."""
+    parts = args.strip().lower().split()
+    usage = (
+        "📝 Usage:\n"
+        "<code>/alert above 4500</code> — ဈေး 4500 ရောက်ရင် အကြောင်းကြားပါ\n"
+        "<code>/alert below 4200</code> — ဈေး 4200 အောက်ကျရင် အကြောင်းကြားပါ\n"
+        "📋 /alerts — သတ်မှတ်ထားသော alerts ကြည့်ပါ"
+    )
+    if len(parts) != 2 or parts[0] not in ("above", "below"):
+        send_message(usage, chat_id)
+        return
+    try:
+        price = float(parts[1].replace(",", ""))
+    except ValueError:
+        send_message(usage, chat_id)
+        return
+    if price <= 0:
+        send_message("⚠️ ဈေးနှုန်း 0 ထက်ကြီးရပါမည်", chat_id)
+        return
+
+    # Sanity check against the current price so "above" alerts below market
+    # (which would fire instantly) are rejected with a helpful message.
+    thb_gram, _, _ = goldapi.get_gold_price()
+    if thb_gram is not None:
+        if parts[0] == "above" and price <= thb_gram:
+            send_message(
+                f"⚠️ လက်ရှိဈေး {fmt(thb_gram)} ထက် မြင့်ရပါမည် (above alert)", chat_id)
+            return
+        if parts[0] == "below" and price >= thb_gram:
+            send_message(
+                f"⚠️ လက်ရှိဈေး {fmt(thb_gram)} ထက် နိမ့်ရပါမည် (below alert)", chat_id)
+            return
+
+    if not storage.add_level_alert(chat_id, parts[0], price):
+        send_message(
+            f"⚠️ Alert {storage.MAX_ALERTS_PER_USER} ခုထက် မပိုနိုင်ပါ — "
+            f"/delalert ဖြင့် အရင်ဖျက်ပါ",
+            chat_id,
+        )
+        return
+
+    arrow = "⬆️" if parts[0] == "above" else "⬇️"
+    send_message(
+        f"✅ <b>Alert သတ်မှတ်ပြီး!</b>\n"
+        f"{arrow} ဈေး {fmt(price)}/g {'ရောက်' if parts[0] == 'above' else 'အောက်ကျ'}ရင် "
+        f"အကြောင်းကြားပါမည်\n"
+        f"ℹ️ တစ်ကြိမ်သာ — fire ပြီးရင် auto ဖျက်ပါမည်",
+        chat_id,
+    )
+
+
+def cmd_alerts(chat_id: str):
+    alerts = storage.get_user_alerts(chat_id)
+    if not alerts:
+        send_message(
+            "📂 Alert မရှိသေးပါ\n"
+            "Use: <code>/alert above 4500</code> or <code>/alert below 4200</code>",
+            chat_id,
+        )
+        return
+    lines = ["🎯 <b>သင့် Price Alerts</b>", "━━━━━━━━━━━━━━━"]
+    for i, a in enumerate(alerts, 1):
+        arrow = "⬆️" if a["dir"] == "above" else "⬇️"
+        lines.append(f"  #{i} {arrow} {a['dir']} {fmt(a['price'])}/g")
+    lines.append("━━━━━━━━━━━━━━━")
+    lines.append("🗑 ဖျက်ရန်: <code>/delalert 1</code>")
+    send_message("\n".join(lines), chat_id)
+
+
+def cmd_delalert(chat_id: str, args: str):
+    try:
+        index = int(args.strip())
+    except (ValueError, AttributeError):
+        send_message("📝 Usage: <code>/delalert 1</code> (/alerts မှာ နံပါတ်ကြည့်ပါ)", chat_id)
+        return
+    removed = storage.remove_level_alert(chat_id, index)
+    if removed is None:
+        send_message(f"⚠️ Alert #{index} မရှိပါ — /alerts မှာ ကြည့်ပါ", chat_id)
+        return
+    send_message(f"🗑 Alert ဖျက်ပြီး: {removed['dir']} {fmt(removed['price'])}/g", chat_id)
+
+
 def cmd_subscribe(chat_id: str):
     if TG_CHAT_ID and chat_id == TG_CHAT_ID:
         send_message("✅ သင်က bot owner ဖြစ်ပါတယ် — အမြဲတမ်း alerts ရရှိပါတယ်", chat_id)
@@ -475,12 +717,96 @@ def cmd_unsubscribe(chat_id: str):
         send_message("ℹ️ Subscribe မလုပ်ရသေးပါ — /subscribe နဲ့ စတင်ပါ", chat_id)
 
 
+# ── Notification preferences ────────────────────────────────────
+
+_PREF_LABELS = {"morning": "🌅 Morning", "evening": "🌙 Evening", "alerts": "📊 Price alerts"}
+
+
+def cmd_settings(chat_id: str):
+    prefs = storage.get_user_prefs(chat_id)
+    lines = ["⚙️ <b>Notification Settings</b>", "━━━━━━━━━━━━━━━"]
+    for key, label in _PREF_LABELS.items():
+        state = "🔔 ON" if prefs.get(key, True) else "🔕 OFF"
+        lines.append(f"  {label}: {state}")
+    quiet = prefs.get("quiet")
+    lines.append(f"  🤫 Quiet hours: {quiet if quiet else 'OFF'}")
+    lines += [
+        "━━━━━━━━━━━━━━━",
+        "🔕 <code>/mute morning|evening|alerts</code>",
+        "🔔 <code>/unmute morning|evening|alerts</code>",
+        "🤫 <code>/quiet 22-7</code> | <code>/quiet off</code>",
+    ]
+    send_message("\n".join(lines), chat_id)
+
+
+def _cmd_mute_unmute(chat_id: str, args: str, value: bool):
+    key = args.strip().lower()
+    if key not in storage.PREF_CATEGORIES:
+        send_message(
+            f"📝 Usage: <code>/{'unmute' if value else 'mute'} morning|evening|alerts</code>",
+            chat_id,
+        )
+        return
+    storage.set_user_pref(chat_id, key, value)
+    label = _PREF_LABELS[key]
+    send_message(
+        f"{'🔔' if value else '🔕'} {label} notifications: <b>{'ON' if value else 'OFF'}</b>",
+        chat_id,
+    )
+
+
+def cmd_mute(chat_id: str, args: str):
+    _cmd_mute_unmute(chat_id, args, False)
+
+
+def cmd_unmute(chat_id: str, args: str):
+    _cmd_mute_unmute(chat_id, args, True)
+
+
+def cmd_quiet(chat_id: str, args: str):
+    spec = args.strip().lower()
+    if spec in ("off", "0"):
+        storage.set_user_pref(chat_id, "quiet", None)
+        send_message("🔔 Quiet hours: <b>OFF</b> — အချိန်မရွေး notifications ရပါမည်", chat_id)
+        return
+    if storage.parse_quiet_hours(spec) is None:
+        send_message(
+            "📝 Usage: <code>/quiet 22-7</code> (BKK နာရီ၊ 22:00–07:00 ဆိတ်ငြိမ်)\n"
+            "ပိတ်ရန်: <code>/quiet off</code>",
+            chat_id,
+        )
+        return
+    storage.set_user_pref(chat_id, "quiet", spec)
+    send_message(
+        f"🤫 Quiet hours: <b>{spec}</b> (BKK)\n"
+        f"ဤအချိန်အတွင်း broadcast notifications မပို့ပါ\n"
+        f"ℹ️ /alert price alerts များက ဆက်ရပါမည်",
+        chat_id,
+    )
+
+
+# Inline keyboard shown with /help and /start — tap instead of typing.
+MAIN_KEYBOARD = {
+    "inline_keyboard": [
+        [{"text": "💰 Price", "callback_data": "/price"},
+         {"text": "🔮 Predict", "callback_data": "/predict"}],
+        [{"text": "📊 Chart", "callback_data": "/chart"},
+         {"text": "🌍 Macro", "callback_data": "/macro"}],
+        [{"text": "🔔 Subscribe", "callback_data": "/subscribe"},
+         {"text": "⚙️ Settings", "callback_data": "/settings"}],
+    ]
+}
+
+
 def cmd_help(chat_id: str):
     send_message(
         "🤖 <b>Gold Monitor Commands</b>\n"
         "━━━━━━━━━━━━━━━\n"
         "💰 /price — လက်ရှိ ရွှေဈေး\n"
         "🔮 /predict — 4h/12h/24h ခန့်မှန်းချက်\n"
+        "📊 /chart [N] — N-day ဈေး chart (default 7)\n"
+        "🎯 /alert above|below &lt;THB&gt; — ဈေးရောက်ရင် အကြောင်းကြားပါ\n"
+        "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
         "🌍 /macro — DXY / US10Y / VIX + fear score\n"
         "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
         "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
@@ -492,10 +818,12 @@ def cmd_help(chat_id: str):
         "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
         "🔔 /subscribe — ဈေးနှုန်း alerts ရယူပါ\n"
         "🔕 /unsubscribe — alerts ရပ်ပါ\n"
+        "⚙️ /settings — notification settings (mute / quiet hours)\n"
         "❓ /help — ဤ menu\n"
         "━━━━━━━━━━━━━━━\n"
         "⚡ Instant replies via webhook",
         chat_id,
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
@@ -506,7 +834,15 @@ PUBLIC_COMMANDS = {
     "/price": lambda cid, _: cmd_price(cid),
     "/predict": lambda cid, _: cmd_predict(cid),
     "/macro": lambda cid, _: cmd_macro(cid),
+    "/chart": cmd_chart,
     "/history": cmd_history,
+    "/alert": cmd_alert,
+    "/alerts": lambda cid, _: cmd_alerts(cid),
+    "/delalert": cmd_delalert,
+    "/settings": lambda cid, _: cmd_settings(cid),
+    "/mute": cmd_mute,
+    "/unmute": cmd_unmute,
+    "/quiet": cmd_quiet,
     "/subscribe": lambda cid, _: cmd_subscribe(cid),
     "/unsubscribe": lambda cid, _: cmd_unsubscribe(cid),
     "/help": lambda cid, _: cmd_help(cid),
@@ -555,6 +891,18 @@ def dispatch_update(update: dict) -> bool:
     Shared by both the poller and the webhook so command behaviour and access
     control can never drift between the two entrypoints again.
     """
+    # Inline keyboard button press — ack the spinner, then re-dispatch the
+    # button's callback_data exactly as if the user had typed the command.
+    cq = update.get("callback_query")
+    if cq:
+        if cq.get("id"):
+            answer_callback_query(str(cq["id"]))
+        data = (cq.get("data") or "").strip()
+        chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
+        if not data or not chat_id or not data.startswith("/"):
+            return False
+        return dispatch_update({"message": {"text": data, "chat": {"id": chat_id}}})
+
     msg = update.get("message", {})
     text = (msg.get("text") or "").strip()
     chat_id = str(msg.get("chat", {}).get("id", ""))
@@ -563,7 +911,10 @@ def dispatch_update(update: dict) -> bool:
         return False
 
     cmd, args = _parse_command(text)
-    is_owner = (not TG_CHAT_ID) or (chat_id == TG_CHAT_ID)
+    # Fail closed: if TELEGRAM_CHAT_ID is not configured, NOBODY is owner.
+    # (Previously everyone was owner in that case — an unsafe default for a
+    # public bot where a missing env var would expose portfolio commands.)
+    is_owner = bool(TG_CHAT_ID) and (chat_id == TG_CHAT_ID)
 
     handler = COMMANDS.get(cmd)
     if not handler:
