@@ -168,16 +168,24 @@ def get_price_history(limit: int = 720) -> list:
 
 # ── Day State (replaces gold_state.json) ────────────────────────
 def load_day_state() -> dict:
-    """Load today's state, reset if date changed."""
+    """Load today's state, reset if date changed.
+
+    On a new day, carry yesterday's last observed price into `prev_close` so the
+    monitor can detect overnight / day-boundary gap-down moves that the intraday
+    open-based alerts would otherwise miss.
+    """
     today = datetime.now(BANGKOK_TZ).strftime("%Y-%m-%d")
     state = _read_file(DAY_STATE_FILE)
-    if state.get("date") == today:
+    if isinstance(state, dict) and state.get("date") == today:
         return state
+    prev_close = state.get("last_price") if isinstance(state, dict) else None
     return {
         "date": today,
         "open_price": None,
         "day_low": None,
         "day_high": None,
+        "prev_close": prev_close,
+        "last_price": prev_close,
         "notified_drop_1": False,
         "notified_drop_2": False,
         "notified_drop_3": False,
@@ -188,6 +196,7 @@ def load_day_state() -> dict:
         "notified_rise_3": False,
         "notified_rise_4": False,
         "notified_rise_5": False,
+        "notified_gap": False,
         "morning_sent": False,
         "evening_sent": False,
     }

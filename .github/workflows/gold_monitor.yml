@@ -2,16 +2,17 @@ name: Gold Price Monitor
 
 on:
   schedule:
-    # NOTE: UTC. BKK = UTC+7. We stop at 16 UTC (= 23:00-23:55 BKK) on purpose:
-    # 17 UTC would be 00:00-00:55 BKK the *next* day, which used to steal the
-    # first-run-of-day slot and suppress the morning message.
+    # 24/7, every 5 min. Gold trades ~24h on weekdays (the US/EU session is the
+    # BKK overnight), and the morning message no longer depends on the first run
+    # landing in the morning (it is gated by `morning_sent`), so running around
+    # the clock is safe AND closes the overnight gap that hid drop alerts.
+    # Finer 5-min sampling catches sharp dips a 15-min poll could skip over.
     #
-    # */15 (was */5): each run costs ~1 billable minute, so */5 burned
-    # ~6,000 min/month — well past the 2,000 free minutes on private repos.
-    # */15 is ~2,000/month and still plenty for %-from-open alerts.
-    - cron: "*/15 0-16 * * 1-5"  # Mon-Fri: every 15min, 07:00-23:55 BKK
-    - cron: "*/15 0-16 * * 6"    # Sat:     every 15min, 07:00-23:55 BKK
-    - cron: "*/15 10-16 * * 0"   # Sun:     every 15min, 17:00-23:55 BKK
+    # Repo is PUBLIC → unlimited Actions minutes, so */5 is fine. (If it ever
+    # goes private again, widen this to */15–*/30 to stay under the 2,000-min cap.)
+    # NOTE: GitHub may still throttle/delay scheduled runs under load; the wide
+    # morning (6–14) / evening (20–23) windows absorb that.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:

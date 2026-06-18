@@ -34,6 +34,9 @@ TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 DROP_THRESHOLD = float(os.environ.get("DROP_THRESHOLD", "0.5"))
 RISE_THRESHOLD = float(os.environ.get("RISE_THRESHOLD", "0.5"))
+# Overnight / day-boundary gap: bigger than the intraday threshold to avoid
+# noise from the normal open-to-open drift.
+GAP_THRESHOLD = float(os.environ.get("GAP_THRESHOLD", "1.0"))
 
 # Try to load thresholds from bot state (user-configurable via /setthreshold, /setrisethreshold)
 try:
@@ -42,6 +45,8 @@ try:
         DROP_THRESHOLD = _bot_state["drop_threshold"]
     if "rise_threshold" in _bot_state:
         RISE_THRESHOLD = _bot_state["rise_threshold"]
+    if "gap_threshold" in _bot_state:
+        GAP_THRESHOLD = _bot_state["gap_threshold"]
 except Exception:
     pass
 
@@ -290,6 +295,32 @@ def main():
         for level in DROP_LEVELS:
             state[level["key"]] = False
 
+    # ── Overnight / Gap-Down Alert (vs yesterday's close) ─────────
+    # The open-based alerts above only see moves from TODAY's open, so a decline
+    # that happens overnight or across the midnight boundary is invisible (the
+    # open is re-anchored each morning, often after the move). We carry
+    # yesterday's last price as `prev_close` and fire a one-shot alert if today
+    # gapped down beyond GAP_THRESHOLD.
+    prev_close = state.get("prev_close")
+    if prev_close and not state.get("notified_gap"):
+        gap = drop_pct(prev_close, thb_gram)  # > 0 means down vs yesterday
+        if gap >= GAP_THRESHOLD:
+            notify(
+                f"🌃 <b>ည/အိပ်ရာထ ဈေးကျ (Gap Down)!</b>\n"
+                f"⏰ {time_str}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"💰 လက်ရှိ   : {fmt(thb_gram)}/g\n"
+                f"🌐 Spot     : ${usd_oz}/oz\n"
+                f"📕 မနေ့ပိတ် : {fmt(prev_close)}/g\n"
+                f"📉 ကျဆင်းမှု : {gap:.2f}% (မနေ့ပိတ်ဈေးနှင့်)\n"
+                f"⬇️ ယနေ့ Low : {fmt(state['day_low'])}/g"
+                f"{ta_signal}{rsi_line}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"👉 ည/နံနက်ပိုင်း ဈေးကျ — DCA အခွင့်အရေး စစ်ပါ!\n"
+                f"📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"
+            )
+            state["notified_gap"] = True
+
     # ── Rise Alerts (5 levels, equal spacing) ──────────────────
     RISE_LEVELS = [
         {"mult": 1, "key": "notified_rise_1", "emoji": "🟢", "title": "ရွှေဈေး တက်နေပါတယ်", "advice": "💎 Portfolio တန်ဖိုး တက်နေပါပြီ!"},
@@ -402,6 +433,8 @@ def main():
         )
         state["evening_sent"] = True
 
+    # Remember the latest price so tomorrow can detect an overnight gap.
+    state["last_price"] = thb_gram
     storage.save_day_state(state)
 
     # ── Train ML Model (once per day, after enough data) ────────
