@@ -22,6 +22,7 @@ from datetime import datetime
 import pytz
 import requests
 
+import i18n
 import storage
 import predictor
 import goldapi
@@ -162,11 +163,15 @@ def webhook_is_configured() -> bool:
 
 
 # ── Command Handlers ────────────────────────────────────────────
+#
+# Every handler takes the caller's language as its last argument. dispatch_update
+# resolves it ONCE per update and threads it through, so a command costs no extra
+# Gist read no matter how many strings it renders.
 
-def cmd_price(chat_id: str):
+def cmd_price(chat_id: str, lang: str):
     thb_gram, usd_oz, thb_rate = goldapi.get_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရပါ — API error", chat_id)
+        send_message(i18n.t("err.price_fetch", lang), chat_id)
         return
 
     history = storage.get_price_history()
@@ -174,21 +179,21 @@ def cmd_price(chat_id: str):
     gb = gold_breakdown(thb_gram)
 
     lines = [
-        "💰 <b>ရွှေဈေး အခုလက်ရှိ</b>",
+        i18n.t("price.header", lang),
         "━━━━━━━━━━━━━━━",
-        "🥇 <b>99.99% (Pure)</b>",
-        f"  ဘတ်သား: {fmt(gb['baht_9999'])}",
-        f"  1g: {fmt(gb['gram_9999'])}",
-        "🥈 <b>96.50%</b>",
-        f"  ဘတ်သား: {fmt(gb['baht_9650'])}",
-        f"  1g: {fmt(gb['gram_9650'])}",
+        i18n.t("price.pure", lang),
+        i18n.t("price.baht_weight", lang, value=fmt(gb["baht_9999"])),
+        i18n.t("price.per_gram", lang, value=fmt(gb["gram_9999"])),
+        i18n.t("price.jewelry", lang),
+        i18n.t("price.baht_weight", lang, value=fmt(gb["baht_9650"])),
+        i18n.t("price.per_gram", lang, value=fmt(gb["gram_9650"])),
         "━━━━━━━━━━━━━━━",
-        f"🌐 USD : ${usd_oz}/oz",
-        f"💱 Rate: 1 USD = {thb_rate} THB",
+        i18n.t("price.spot", lang, value=usd_oz),
+        i18n.t("price.rate", lang, value=thb_rate),
     ]
 
     if trend.get("change_1h") is not None:
-        lines.append("\n📊 <b>Changes:</b>")
+        lines.append(i18n.t("price.changes_header", lang))
         for key, label in [("change_1h", "1h"), ("change_4h", "4h"),
                            ("change_24h", "24h"), ("change_7d", "7d")]:
             if key in trend:
@@ -198,31 +203,26 @@ def cmd_price(chat_id: str):
     if len(history) >= 14:
         ta = predictor.analyze(history)
         if ta.get("overall_signal"):
-            lines.append(f"\n🎯 Signal: <b>{ta['overall_signal']}</b>")
+            lines.append(i18n.t("price.signal", lang, signal=ta["overall_signal"]))
         if ta.get("rsi"):
-            lines.append(f"📊 RSI: {ta['rsi']}")
+            lines.append(i18n.t("price.rsi", lang, value=ta["rsi"]))
 
     send_message("\n".join(lines), chat_id)
 
 
-def cmd_predict(chat_id: str):
+def cmd_predict(chat_id: str, lang: str):
     history = storage.get_price_history()
     if len(history) < 15:
-        send_message(
-            f"📊 Data points: {len(history)}/100\n"
-            f"TA requires 15+, ML requires 100+.\n"
-            f"Keep running — data accumulates every hour!",
-            chat_id,
-        )
+        send_message(i18n.t("predict.need_data", lang, n=len(history)), chat_id)
         return
 
     model_data = storage.load_model_data()
     # Score any matured predictions first so the hit-rate shown is current.
     if predictor.resolve_predictions(model_data, history):
         storage.save_model_data(model_data)
-    prediction = predictor.predict(history, model_data)
+    prediction = predictor.predict(history, model_data, lang)
     prediction["hit_rates"] = predictor.prediction_hit_rates(model_data)
-    msg = predictor.format_prediction_message(prediction)
+    msg = predictor.format_prediction_message(prediction, lang)
     send_message(msg, chat_id)
 
 
@@ -306,7 +306,7 @@ def _quickchart_short_url(config: dict) -> str | None:
     return None
 
 
-def cmd_chart(chat_id: str, args: str):
+def cmd_chart(chat_id: str, args: str, lang: str):
     try:
         days = int(args.strip()) if args.strip() else 7
     except ValueError:
@@ -316,21 +316,20 @@ def cmd_chart(chat_id: str, args: str):
     history = storage.get_price_history()
     config = build_chart_config(history, days)
     if config is None:
-        send_message("📊 Data collecting — not enough history for a chart yet", chat_id)
+        send_message(i18n.t("chart.no_data", lang), chat_id)
         return
 
     url = _quickchart_short_url(config)
     if url is None:
-        send_message("⚠️ Chart service unavailable — ခဏနေ ပြန်စမ်းပါ", chat_id)
+        send_message(i18n.t("chart.unavailable", lang), chat_id)
         return
 
     prices = [p["thb_gram"] for p in chart_points(history, days)]
     change = ((prices[-1] - prices[0]) / prices[0]) * 100 if prices[0] else 0
-    arrow = "📈" if change >= 0 else "📉"
-    caption = (
-        f"📊 <b>ရွှေဈေး {days}-Day Chart</b>\n"
-        f"💰 Now: {fmt(prices[-1])}/g | {arrow} {change:+.2f}%\n"
-        f"⬆️ High: {fmt(max(prices))} | ⬇️ Low: {fmt(min(prices))}"
+    caption = i18n.t(
+        "chart.caption", lang,
+        days=days, now=fmt(prices[-1]), arrow="📈" if change >= 0 else "📉",
+        change=change, high=fmt(max(prices)), low=fmt(min(prices)),
     )
     resp = send_photo(url, caption, chat_id)
     if not resp or not resp.get("ok"):
@@ -338,204 +337,180 @@ def cmd_chart(chat_id: str, args: str):
         send_message(f"{caption}\n🔗 {url}", chat_id)
 
 
-def cmd_macro(chat_id: str):
+def cmd_macro(chat_id: str, lang: str):
     """Show the macro & fear context (DXY / US10Y / VIX) on demand."""
-    block = signals.format_macro_block()
+    block = signals.format_macro_block(lang=lang)
     if not block:
-        send_message("⚠️ Macro data ယူမရပါ — ခဏနေ ပြန်စမ်းပါ", chat_id)
+        send_message(i18n.t("macro.unavailable", lang), chat_id)
         return
     send_message(
         f"{block}\n"
         f"━━━━━━━━━━━━━━━\n"
-        f"ℹ️ Gold drivers — context only, not a forecast",
+        f"{i18n.t('macro.footer', lang)}",
         chat_id,
     )
 
 
-def cmd_bought(chat_id: str, args: str):
+def cmd_bought(chat_id: str, args: str, lang: str):
     try:
         amount = float(args.strip())
     except (ValueError, AttributeError):
-        send_message(
-            "📝 Usage: <code>/bought 5000</code>\n"
-            "5000 = ဝယ်ယူသည့် ငွေပမာဏ (THB)",
-            chat_id,
-        )
+        send_message(i18n.t("bought.usage", lang), chat_id)
         return
 
     if amount <= 0:
-        send_message("⚠️ ပမာဏ 0 ထက်ကြီးရပါမည်", chat_id)
+        send_message(i18n.t("err.amount_positive", lang), chat_id)
         return
 
     thb_gram, _, _ = goldapi.get_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရ — ထပ်ကြိုးစားပါ", chat_id)
+        send_message(i18n.t("err.price_fetch_retry", lang), chat_id)
         return
 
     entry = storage.log_buy(amount, thb_gram)
     send_message(
-        f"✅ <b>ဝယ်ယူမှု မှတ်တမ်းတင်ပြီး!</b>\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"💵 ပမာဏ: {fmt(amount)}\n"
-        f"💰 ဈေးနှုန်း: {fmt(thb_gram)}/gram\n"
-        f"⚖️ ရွှေ: {entry['grams']:.4f} grams\n"
-        f"📅 {datetime.now(BANGKOK_TZ).strftime('%d %b %Y %H:%M')}",
+        i18n.t("bought.ok", lang, amount=fmt(amount), price=fmt(thb_gram),
+               grams=entry["grams"],
+               when=datetime.now(BANGKOK_TZ).strftime("%d %b %Y %H:%M")),
         chat_id,
     )
 
 
-def cmd_sold(chat_id: str, args: str):
+def cmd_sold(chat_id: str, args: str, lang: str):
     try:
         amount = float(args.strip())
     except (ValueError, AttributeError):
-        send_message(
-            "📝 Usage: <code>/sold 5000</code>\n"
-            "5000 = ရောင်းချသည့် ငွေပမာဏ (THB)",
-            chat_id,
-        )
+        send_message(i18n.t("sold.usage", lang), chat_id)
         return
 
     if amount <= 0:
-        send_message("⚠️ ပမာဏ 0 ထက်ကြီးရပါမည်", chat_id)
+        send_message(i18n.t("err.amount_positive", lang), chat_id)
         return
 
     thb_gram, _, _ = goldapi.get_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရ — ထပ်ကြိုးစားပါ", chat_id)
+        send_message(i18n.t("err.price_fetch_retry", lang), chat_id)
         return
 
     entry = storage.log_sell(amount, thb_gram)
     if entry is None:
-        send_message("⚠️ ရွှေ မလုံလောက်ပါ — portfolio ထဲမှာ ရွှေအနည်းငယ်သာ ရှိပါသည်", chat_id)
+        send_message(i18n.t("sold.not_enough", lang), chat_id)
         return
 
     send_message(
-        f"✅ <b>ရောင်းချမှု မှတ်တမ်းတင်ပြီး!</b>\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"💵 ပမာဏ: {fmt(amount)}\n"
-        f"💰 ဈေးနှုန်း: {fmt(thb_gram)}/gram\n"
-        f"⚖️ ရွှေ: {entry['grams']:.4f} grams\n"
-        f"📅 {datetime.now(BANGKOK_TZ).strftime('%d %b %Y %H:%M')}",
+        i18n.t("sold.ok", lang, amount=fmt(amount), price=fmt(thb_gram),
+               grams=entry["grams"],
+               when=datetime.now(BANGKOK_TZ).strftime("%d %b %Y %H:%M")),
         chat_id,
     )
 
 
-def cmd_edit(chat_id: str, args: str):
+def cmd_edit(chat_id: str, args: str, lang: str):
     parts = args.strip().split()
     if len(parts) != 2:
-        send_message(
-            "📝 Usage: <code>/edit 3 6000</code>\n"
-            "3 = entry နံပါတ် (/portfolio မှာ ကြည့်ပါ)\n"
-            "6000 = ပြင်ဆင်လိုသည့် ပမာဏ (THB)",
-            chat_id,
-        )
+        send_message(i18n.t("edit.usage", lang), chat_id)
         return
 
     try:
         index = int(parts[0])
         new_amount = float(parts[1])
     except ValueError:
-        send_message("⚠️ /edit &lt;နံပါတ်&gt; &lt;ပမာဏ&gt; — ဂဏန်းဖြစ်ရပါမည်", chat_id)
+        send_message(i18n.t("edit.numbers", lang), chat_id)
         return
 
     if new_amount <= 0:
-        send_message("⚠️ ပမာဏ 0 ထက်ကြီးရပါမည်", chat_id)
+        send_message(i18n.t("err.amount_positive", lang), chat_id)
         return
 
     entry = storage.edit_entry(index, new_amount)
     if entry is None:
-        send_message(f"⚠️ Entry #{index} မရှိပါ — /portfolio မှာ နံပါတ်ကြည့်ပါ", chat_id)
+        send_message(i18n.t("edit.not_found", lang, index=index), chat_id)
         return
 
-    type_label = "ဝယ်ယူ" if entry["type"] == "buy" else "ရောင်းချ"
+    type_label = i18n.t("entry.buy" if entry["type"] == "buy" else "entry.sell", lang)
     send_message(
-        f"✏️ <b>Entry #{index} ပြင်ဆင်ပြီး!</b>\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"📋 Type: {type_label}\n"
-        f"💵 ပမာဏ: {fmt(new_amount)}\n"
-        f"💰 ဈေးနှုန်း: {fmt(entry['price_per_gram'])}/gram\n"
-        f"⚖️ ရွှေ: {entry['grams']:.4f} grams",
+        i18n.t("edit.ok", lang, index=index, type=type_label,
+               amount=fmt(new_amount), price=fmt(entry["price_per_gram"]),
+               grams=entry["grams"]),
         chat_id,
     )
 
 
-def cmd_delete(chat_id: str, args: str):
+def cmd_delete(chat_id: str, args: str, lang: str):
     try:
         index = int(args.strip())
     except (ValueError, AttributeError):
-        send_message(
-            "📝 Usage: <code>/delete 3</code>\n"
-            "3 = ဖျက်လိုသည့် entry နံပါတ်",
-            chat_id,
-        )
+        send_message(i18n.t("delete.usage", lang), chat_id)
         return
 
     entry = storage.delete_entry(index)
     if entry is None:
-        send_message(f"⚠️ Entry #{index} မရှိပါ", chat_id)
+        send_message(i18n.t("delete.not_found", lang, index=index), chat_id)
         return
 
-    type_label = "ဝယ်ယူ" if entry["type"] == "buy" else "ရောင်းချ"
+    type_label = i18n.t("entry.buy" if entry["type"] == "buy" else "entry.sell", lang)
     send_message(
-        f"🗑 <b>Entry #{index} ဖျက်ပြီး!</b>\n"
-        f"📋 {type_label}: {fmt(entry['amount_thb'])} @ {fmt(entry['price_per_gram'])}/g",
+        i18n.t("delete.ok", lang, index=index, type=type_label,
+               amount=fmt(entry["amount_thb"]), price=fmt(entry["price_per_gram"])),
         chat_id,
     )
 
 
-def cmd_portfolio(chat_id: str):
+def cmd_portfolio(chat_id: str, lang: str):
     thb_gram, _, _ = goldapi.get_gold_price()
     if thb_gram is None:
-        send_message("⚠️ ဈေးနှုန်း ယူမရပါ", chat_id)
+        send_message(i18n.t("err.price_fetch_short", lang), chat_id)
         return
 
     pnl = storage.get_portfolio_pnl(thb_gram)
     if pnl["num_buys"] == 0 and pnl["num_sells"] == 0:
-        send_message(
-            "📂 မှတ်တမ်း မရှိသေးပါ\n"
-            "Use: <code>/bought 5000</code> to log a purchase\n"
-            "Use: <code>/sold 3000</code> to log a sale",
-            chat_id,
-        )
+        send_message(i18n.t("portfolio.empty", lang), chat_id)
         return
 
     profit_emoji = "🟢" if pnl["pnl_thb"] >= 0 else "🔴"
     lines = [
-        "📊 <b>ရွှေ Portfolio</b>",
+        i18n.t("portfolio.header", lang),
         "━━━━━━━━━━━━━━━",
-        f"📦 Buys: {pnl['num_buys']} | Sells: {pnl['num_sells']}",
-        f"💵 Invested: {fmt(pnl['total_invested'])}",
-        f"⚖️ Holdings: {pnl['total_grams']:.4f} grams",
-        f"📈 Avg buy cost: {fmt(pnl['avg_cost'])}/gram",
-        f"💰 Current price: {fmt(pnl['current_price'])}/gram",
+        i18n.t("portfolio.counts", lang, buys=pnl["num_buys"], sells=pnl["num_sells"]),
+        i18n.t("portfolio.invested", lang, value=fmt(pnl["total_invested"])),
+        i18n.t("portfolio.holdings", lang, grams=pnl["total_grams"]),
+        i18n.t("portfolio.avg_cost", lang, value=fmt(pnl["avg_cost"])),
+        i18n.t("portfolio.current_price", lang, value=fmt(pnl["current_price"])),
         "━━━━━━━━━━━━━━━",
-        f"💎 Current value: {fmt(pnl['current_value'])}",
+        i18n.t("portfolio.current_value", lang, value=fmt(pnl["current_value"])),
     ]
 
     if pnl["realized_pnl"] != 0:
-        r_emoji = "🟢" if pnl["realized_pnl"] >= 0 else "🔴"
-        lines.append(f"{r_emoji} Realized P&L: {fmt(pnl['realized_pnl'])}")
+        lines.append(i18n.t(
+            "portfolio.realized", lang,
+            emoji="🟢" if pnl["realized_pnl"] >= 0 else "🔴",
+            value=fmt(pnl["realized_pnl"])))
     if pnl.get("unrealized_pnl") is not None and pnl["total_grams"] > 0:
-        u_emoji = "🟢" if pnl["unrealized_pnl"] >= 0 else "🔴"
-        lines.append(f"{u_emoji} Unrealized P&L: {fmt(pnl['unrealized_pnl'])}")
+        lines.append(i18n.t(
+            "portfolio.unrealized", lang,
+            emoji="🟢" if pnl["unrealized_pnl"] >= 0 else "🔴",
+            value=fmt(pnl["unrealized_pnl"])))
 
-    lines.append(f"{profit_emoji} <b>Total P&L: {fmt(pnl['pnl_thb'])} ({pnl['pnl_pct']:+.2f}%)</b>")
+    lines.append(i18n.t("portfolio.total", lang, emoji=profit_emoji,
+                        value=fmt(pnl["pnl_thb"]), pct=pnl["pnl_pct"]))
 
     if pnl["entries"]:
         total_entries = pnl["num_buys"] + pnl["num_sells"]
         start_idx = max(1, total_entries - len(pnl["entries"]) + 1)
-        lines.append("\n📝 <b>Recent entries:</b>")
+        lines.append(i18n.t("portfolio.recent", lang))
         for i, e in enumerate(pnl["entries"]):
             idx = start_idx + i
             ts = e["ts"][:10]
-            icon = "🟢" if e.get("type", "buy") == "buy" else "🔴"
-            label = "BUY" if e.get("type", "buy") == "buy" else "SELL"
-            lines.append(f"  {icon} #{idx} {label} {ts}: {fmt(e['amount_thb'])} @ {fmt(e['price_per_gram'])}/g")
+            is_buy = e.get("type", "buy") == "buy"
+            icon = "🟢" if is_buy else "🔴"
+            label = i18n.t("entry.buy" if is_buy else "entry.sell", lang)
+            lines.append(f"  {icon} #{idx} {label} {ts}: "
+                         f"{fmt(e['amount_thb'])} @ {fmt(e['price_per_gram'])}/g")
 
     send_message("\n".join(lines), chat_id)
 
 
-def cmd_history(chat_id: str, args: str):
+def cmd_history(chat_id: str, args: str, lang: str):
     try:
         days = int(args.strip()) if args.strip() else 7
     except ValueError:
@@ -546,7 +521,7 @@ def cmd_history(chat_id: str, args: str):
 
     history = storage.get_price_history()
     if len(history) < 2:
-        send_message("📊 Data collecting — not enough history yet", chat_id)
+        send_message(i18n.t("err.not_enough_data", lang), chat_id)
         return
 
     daily = {}
@@ -558,7 +533,7 @@ def cmd_history(chat_id: str, args: str):
         daily[date]["usd"].append(h.get("usd_oz", 0))
 
     dates = sorted(daily.keys())[-days:]
-    lines = [f"📊 <b>ရွှေဈေး {len(dates)}-Day History</b>", "━━━━━━━━━━━━━━━"]
+    lines = [i18n.t("history.header", lang, days=len(dates)), "━━━━━━━━━━━━━━━"]
 
     for date in dates:
         p = daily[date]["prices"]
@@ -573,15 +548,15 @@ def cmd_history(chat_id: str, args: str):
     send_message("\n".join(lines), chat_id)
 
 
-def cmd_setthreshold(chat_id: str, args: str):
+def cmd_setthreshold(chat_id: str, args: str, lang: str):
     try:
         val = float(args.strip())
     except (ValueError, AttributeError):
-        send_message("Usage: <code>/setthreshold 0.5</code>", chat_id)
+        send_message(i18n.t("threshold.usage_drop", lang), chat_id)
         return
 
     if val <= 0 or val > 10:
-        send_message("⚠️ 0.1 — 10 ကြား ဖြစ်ရပါမည်", chat_id)
+        send_message(i18n.t("threshold.range", lang), chat_id)
         return
 
     bot_state = storage.load_bot_state()
@@ -590,56 +565,48 @@ def cmd_setthreshold(chat_id: str, args: str):
     # The monitor fires 5 equally spaced levels at 1x–5x this value, so quote
     # the real ladder rather than a "1.5x strong alert" tier that never fires.
     send_message(
-        f"✅ Drop alert threshold → <b>{val}%</b>\n"
-        f"🟡 L1: ≥{val:g}% | 🟠 L2: ≥{val * 2:g}% | 🔴 L3: ≥{val * 3:g}%\n"
-        f"🔴🔴 L4: ≥{val * 4:g}% | 🚨 L5: ≥{val * 5:g}%",
+        i18n.t("threshold.drop_ok", lang, val=val, l1=val, l2=val * 2,
+               l3=val * 3, l4=val * 4, l5=val * 5),
         chat_id,
     )
 
 
-def cmd_setrisethreshold(chat_id: str, args: str):
+def cmd_setrisethreshold(chat_id: str, args: str, lang: str):
     try:
         val = float(args.strip())
     except (ValueError, AttributeError):
-        send_message("Usage: <code>/setrisethreshold 0.5</code>", chat_id)
+        send_message(i18n.t("threshold.usage_rise", lang), chat_id)
         return
 
     if val <= 0 or val > 10:
-        send_message("⚠️ 0.1 — 10 ကြား ဖြစ်ရပါမည်", chat_id)
+        send_message(i18n.t("threshold.range", lang), chat_id)
         return
 
     bot_state = storage.load_bot_state()
     bot_state["rise_threshold"] = val
     storage.save_bot_state(bot_state)
     send_message(
-        f"✅ Rise alert threshold → <b>{val}%</b>\n"
-        f"🟢 L1: ≥{val:g}% | 🟢🟢 L2: ≥{val * 2:g}% | 🟣 L3: ≥{val * 3:g}%\n"
-        f"🟣🟣 L4: ≥{val * 4:g}% | 🚀 L5: ≥{val * 5:g}%",
+        i18n.t("threshold.rise_ok", lang, val=val, l1=val, l2=val * 2,
+               l3=val * 3, l4=val * 4, l5=val * 5),
         chat_id,
     )
 
 
 # ── Price-level alerts ──────────────────────────────────────────
 
-def cmd_alert(chat_id: str, args: str):
+def cmd_alert(chat_id: str, args: str, lang: str):
     """/alert above 4500  |  /alert below 4200 — one-shot price-level alert."""
     parts = args.strip().lower().split()
-    usage = (
-        "📝 Usage:\n"
-        "<code>/alert above 4500</code> — ဈေး 4500 ရောက်ရင် အကြောင်းကြားပါ\n"
-        "<code>/alert below 4200</code> — ဈေး 4200 အောက်ကျရင် အကြောင်းကြားပါ\n"
-        "📋 /alerts — သတ်မှတ်ထားသော alerts ကြည့်ပါ"
-    )
     if len(parts) != 2 or parts[0] not in ("above", "below"):
-        send_message(usage, chat_id)
+        send_message(i18n.t("alert.usage", lang), chat_id)
         return
     try:
         price = float(parts[1].replace(",", ""))
     except ValueError:
-        send_message(usage, chat_id)
+        send_message(i18n.t("alert.usage", lang), chat_id)
         return
     if price <= 0:
-        send_message("⚠️ ဈေးနှုန်း 0 ထက်ကြီးရပါမည်", chat_id)
+        send_message(i18n.t("alert.price_positive", lang), chat_id)
         return
 
     # Sanity check against the current price so "above" alerts below market
@@ -647,223 +614,194 @@ def cmd_alert(chat_id: str, args: str):
     thb_gram, _, _ = goldapi.get_gold_price()
     if thb_gram is not None:
         if parts[0] == "above" and price <= thb_gram:
-            send_message(
-                f"⚠️ လက်ရှိဈေး {fmt(thb_gram)} ထက် မြင့်ရပါမည် (above alert)", chat_id)
+            send_message(i18n.t("alert.must_be_above", lang, price=fmt(thb_gram)), chat_id)
             return
         if parts[0] == "below" and price >= thb_gram:
-            send_message(
-                f"⚠️ လက်ရှိဈေး {fmt(thb_gram)} ထက် နိမ့်ရပါမည် (below alert)", chat_id)
+            send_message(i18n.t("alert.must_be_below", lang, price=fmt(thb_gram)), chat_id)
             return
 
     if not storage.add_level_alert(chat_id, parts[0], price):
-        send_message(
-            f"⚠️ Alert {storage.MAX_ALERTS_PER_USER} ခုထက် မပိုနိုင်ပါ — "
-            f"/delalert ဖြင့် အရင်ဖျက်ပါ",
-            chat_id,
-        )
+        send_message(i18n.t("alert.limit", lang, max=storage.MAX_ALERTS_PER_USER), chat_id)
         return
 
-    arrow = "⬆️" if parts[0] == "above" else "⬇️"
-    send_message(
-        f"✅ <b>Alert သတ်မှတ်ပြီး!</b>\n"
-        f"{arrow} ဈေး {fmt(price)}/g {'ရောက်' if parts[0] == 'above' else 'အောက်ကျ'}ရင် "
-        f"အကြောင်းကြားပါမည်\n"
-        f"ℹ️ တစ်ကြိမ်သာ — fire ပြီးရင် auto ဖျက်ပါမည်",
-        chat_id,
-    )
+    key = "alert.ok_above" if parts[0] == "above" else "alert.ok_below"
+    send_message(i18n.t(key, lang, price=fmt(price)), chat_id)
 
 
-def cmd_alerts(chat_id: str):
+def cmd_alerts(chat_id: str, lang: str):
     alerts = storage.get_user_alerts(chat_id)
     if not alerts:
-        send_message(
-            "📂 Alert မရှိသေးပါ\n"
-            "Use: <code>/alert above 4500</code> or <code>/alert below 4200</code>",
-            chat_id,
-        )
+        send_message(i18n.t("alerts.empty", lang), chat_id)
         return
-    lines = ["🎯 <b>သင့် Price Alerts</b>", "━━━━━━━━━━━━━━━"]
+    lines = [i18n.t("alerts.header", lang), "━━━━━━━━━━━━━━━"]
     for i, a in enumerate(alerts, 1):
         arrow = "⬆️" if a["dir"] == "above" else "⬇️"
         lines.append(f"  #{i} {arrow} {a['dir']} {fmt(a['price'])}/g")
     lines.append("━━━━━━━━━━━━━━━")
-    lines.append("🗑 ဖျက်ရန်: <code>/delalert 1</code>")
+    lines.append(i18n.t("alerts.delete_hint", lang))
     send_message("\n".join(lines), chat_id)
 
 
-def cmd_delalert(chat_id: str, args: str):
+def cmd_delalert(chat_id: str, args: str, lang: str):
     try:
         index = int(args.strip())
     except (ValueError, AttributeError):
-        send_message("📝 Usage: <code>/delalert 1</code> (/alerts မှာ နံပါတ်ကြည့်ပါ)", chat_id)
+        send_message(i18n.t("delalert.usage", lang), chat_id)
         return
     removed = storage.remove_level_alert(chat_id, index)
     if removed is None:
-        send_message(f"⚠️ Alert #{index} မရှိပါ — /alerts မှာ ကြည့်ပါ", chat_id)
+        send_message(i18n.t("delalert.not_found", lang, index=index), chat_id)
         return
-    send_message(f"🗑 Alert ဖျက်ပြီး: {removed['dir']} {fmt(removed['price'])}/g", chat_id)
+    send_message(i18n.t("delalert.ok", lang, dir=removed["dir"],
+                        price=fmt(removed["price"])), chat_id)
 
 
-def cmd_subscribe(chat_id: str):
+def cmd_subscribe(chat_id: str, lang: str):
     if TG_CHAT_ID and chat_id == TG_CHAT_ID:
-        send_message("✅ သင်က bot owner ဖြစ်ပါတယ် — အမြဲတမ်း alerts ရရှိပါတယ်", chat_id)
+        send_message(i18n.t("subscribe.owner", lang), chat_id)
         return
     added = storage.add_subscriber(chat_id)
-    if added:
-        send_message(
-            "✅ <b>Subscribe လုပ်ပြီးပါပြီ!</b>\n"
-            "🌅 မနက်ခင်း ရွှေဈေး\n"
-            "🌙 ညနေ အနှစ်ချုပ်\n"
-            "📊 ဈေးနှုန်း alerts\n"
-            "━━━━━━━━━━━━━━━\n"
-            "ရပ်ချင်ရင် /unsubscribe ရိုက်ပါ",
-            chat_id,
-        )
-    else:
-        send_message("ℹ️ Subscribe ဖြစ်ပြီးသားပါ — /unsubscribe နဲ့ ရပ်နိုင်ပါတယ်", chat_id)
+    send_message(i18n.t("subscribe.ok" if added else "subscribe.already", lang), chat_id)
 
 
-def cmd_unsubscribe(chat_id: str):
+def cmd_unsubscribe(chat_id: str, lang: str):
     if TG_CHAT_ID and chat_id == TG_CHAT_ID:
-        send_message("ℹ️ သင်က bot owner ဖြစ်ပါတယ် — unsubscribe လုပ်လို့မရပါ", chat_id)
+        send_message(i18n.t("unsubscribe.owner", lang), chat_id)
         return
     removed = storage.remove_subscriber(chat_id)
-    if removed:
-        send_message("👋 Unsubscribe လုပ်ပြီးပါပြီ — alerts ပို့တော့မှာ မဟုတ်ပါ", chat_id)
-    else:
-        send_message("ℹ️ Subscribe မလုပ်ရသေးပါ — /subscribe နဲ့ စတင်ပါ", chat_id)
+    send_message(
+        i18n.t("unsubscribe.ok" if removed else "unsubscribe.not_subscribed", lang),
+        chat_id,
+    )
 
 
 # ── Notification preferences ────────────────────────────────────
 
-_PREF_LABELS = {"morning": "🌅 Morning", "evening": "🌙 Evening", "alerts": "📊 Price alerts"}
+_PREF_LABEL_KEYS = {"morning": "settings.morning", "evening": "settings.evening",
+                    "alerts": "settings.alerts"}
 
 
-def cmd_settings(chat_id: str):
+def cmd_settings(chat_id: str, lang: str):
     prefs = storage.get_user_prefs(chat_id)
-    lines = ["⚙️ <b>Notification Settings</b>", "━━━━━━━━━━━━━━━"]
-    for key, label in _PREF_LABELS.items():
-        state = "🔔 ON" if prefs.get(key, True) else "🔕 OFF"
-        lines.append(f"  {label}: {state}")
+    lines = [i18n.t("settings.header", lang), "━━━━━━━━━━━━━━━"]
+    for key, label_key in _PREF_LABEL_KEYS.items():
+        state = i18n.t("settings.on" if prefs.get(key, True) else "settings.off", lang)
+        lines.append(f"  {i18n.t(label_key, lang)}: {state}")
     quiet = prefs.get("quiet")
-    lines.append(f"  🤫 Quiet hours: {quiet if quiet else 'OFF'}")
-    lines += [
-        "━━━━━━━━━━━━━━━",
-        "🔕 <code>/mute morning|evening|alerts</code>",
-        "🔔 <code>/unmute morning|evening|alerts</code>",
-        "🤫 <code>/quiet 22-7</code> | <code>/quiet off</code>",
-    ]
+    lines.append(i18n.t("settings.quiet", lang,
+                        value=quiet if quiet else i18n.t("settings.off", lang)))
+    lines.append(i18n.t("settings.language", lang,
+                        value=i18n.LANGUAGES[i18n.normalize(lang)]))
+    lines += ["━━━━━━━━━━━━━━━", i18n.t("settings.hints", lang)]
     send_message("\n".join(lines), chat_id)
 
 
-def _cmd_mute_unmute(chat_id: str, args: str, value: bool):
+def _cmd_mute_unmute(chat_id: str, args: str, lang: str, value: bool):
     key = args.strip().lower()
     if key not in storage.PREF_CATEGORIES:
         send_message(
-            f"📝 Usage: <code>/{'unmute' if value else 'mute'} morning|evening|alerts</code>",
-            chat_id,
-        )
+            i18n.t("mute.usage", lang, cmd="unmute" if value else "mute"), chat_id)
         return
     storage.set_user_pref(chat_id, key, value)
-    label = _PREF_LABELS[key]
     send_message(
-        f"{'🔔' if value else '🔕'} {label} notifications: <b>{'ON' if value else 'OFF'}</b>",
+        i18n.t("mute.result", lang,
+               icon="🔔" if value else "🔕",
+               label=i18n.t(_PREF_LABEL_KEYS[key], lang),
+               state=i18n.t("mute.on" if value else "mute.off", lang)),
         chat_id,
     )
 
 
-def cmd_mute(chat_id: str, args: str):
-    _cmd_mute_unmute(chat_id, args, False)
+def cmd_mute(chat_id: str, args: str, lang: str):
+    _cmd_mute_unmute(chat_id, args, lang, False)
 
 
-def cmd_unmute(chat_id: str, args: str):
-    _cmd_mute_unmute(chat_id, args, True)
+def cmd_unmute(chat_id: str, args: str, lang: str):
+    _cmd_mute_unmute(chat_id, args, lang, True)
 
 
-def cmd_quiet(chat_id: str, args: str):
+def cmd_quiet(chat_id: str, args: str, lang: str):
     spec = args.strip().lower()
     if spec in ("off", "0"):
         storage.set_user_pref(chat_id, "quiet", None)
-        send_message("🔔 Quiet hours: <b>OFF</b> — အချိန်မရွေး notifications ရပါမည်", chat_id)
+        send_message(i18n.t("quiet.off", lang), chat_id)
         return
     if storage.parse_quiet_hours(spec) is None:
+        send_message(i18n.t("quiet.usage", lang), chat_id)
+        return
+    storage.set_user_pref(chat_id, "quiet", spec)
+    send_message(i18n.t("quiet.ok", lang, spec=spec), chat_id)
+
+
+# ── Interface language ──────────────────────────────────────────
+
+def cmd_lang(chat_id: str, args: str, lang: str):
+    """/lang — show the current language; /lang en|my|th — change it.
+
+    The confirmation is deliberately rendered in the NEW language so the user
+    can see straight away whether they picked the one they wanted.
+    """
+    choice = args.strip().lower()
+    usage = i18n.t("lang.usage", lang, current=i18n.LANGUAGES[i18n.normalize(lang)])
+    if not choice:
+        send_message(usage, chat_id)
+        return
+    if not i18n.is_supported(choice):
+        # Say so explicitly — otherwise a rejected value is indistinguishable
+        # from the user simply asking to see the options.
         send_message(
-            "📝 Usage: <code>/quiet 22-7</code> (BKK နာရီ၊ 22:00–07:00 ဆိတ်ငြိမ်)\n"
-            "ပိတ်ရန်: <code>/quiet off</code>",
+            i18n.t("lang.invalid", lang, choice=html_module.escape(choice))
+            + "\n" + usage,
             chat_id,
         )
         return
-    storage.set_user_pref(chat_id, "quiet", spec)
-    send_message(
-        f"🤫 Quiet hours: <b>{spec}</b> (BKK)\n"
-        f"ဤအချိန်အတွင်း broadcast notifications မပို့ပါ\n"
-        f"ℹ️ /alert price alerts များက ဆက်ရပါမည်",
-        chat_id,
-    )
+
+    new_lang = i18n.normalize(choice)
+    storage.set_user_pref(chat_id, "lang", new_lang)
+    send_message(i18n.t("lang.ok", new_lang, lang=i18n.LANGUAGES[new_lang]), chat_id)
 
 
 # Inline keyboard shown with /help and /start — tap instead of typing.
-MAIN_KEYBOARD = {
-    "inline_keyboard": [
-        [{"text": "💰 Price", "callback_data": "/price"},
-         {"text": "🔮 Predict", "callback_data": "/predict"}],
-        [{"text": "📊 Chart", "callback_data": "/chart"},
-         {"text": "🌍 Macro", "callback_data": "/macro"}],
-        [{"text": "🔔 Subscribe", "callback_data": "/subscribe"},
-         {"text": "⚙️ Settings", "callback_data": "/settings"}],
-    ]
-}
+def main_keyboard(lang: str | None = None) -> dict:
+    """Localised inline keyboard. callback_data stays the raw command."""
+    return {
+        "inline_keyboard": [
+            [{"text": i18n.t("btn.price", lang), "callback_data": "/price"},
+             {"text": i18n.t("btn.predict", lang), "callback_data": "/predict"}],
+            [{"text": i18n.t("btn.chart", lang), "callback_data": "/chart"},
+             {"text": i18n.t("btn.macro", lang), "callback_data": "/macro"}],
+            [{"text": i18n.t("btn.subscribe", lang), "callback_data": "/subscribe"},
+             {"text": i18n.t("btn.settings", lang), "callback_data": "/settings"}],
+        ]
+    }
 
 
-def cmd_help(chat_id: str):
-    send_message(
-        "🤖 <b>Gold Monitor Commands</b>\n"
-        "━━━━━━━━━━━━━━━\n"
-        "💰 /price — လက်ရှိ ရွှေဈေး\n"
-        "🔮 /predict — 4h/12h/24h ခန့်မှန်းချက်\n"
-        "📊 /chart [N] — N-day ဈေး chart (default 7)\n"
-        "🎯 /alert above|below &lt;THB&gt; — ဈေးရောက်ရင် အကြောင်းကြားပါ\n"
-        "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
-        "🌍 /macro — DXY / US10Y / VIX + fear score\n"
-        "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
-        "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
-        "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
-        "🗑 /delete &lt;#&gt; — entry ဖျက်ပါ\n"
-        "📊 /portfolio — Portfolio P&L\n"
-        "📈 /history [N] — N-day ဈေးသမိုင်း\n"
-        "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
-        "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
-        "🔔 /subscribe — ဈေးနှုန်း alerts ရယူပါ\n"
-        "🔕 /unsubscribe — alerts ရပ်ပါ\n"
-        "⚙️ /settings — notification settings (mute / quiet hours)\n"
-        "❓ /help — ဤ menu\n"
-        "━━━━━━━━━━━━━━━\n"
-        "⚡ Instant replies via webhook",
-        chat_id,
-        reply_markup=MAIN_KEYBOARD,
-    )
+def cmd_help(chat_id: str, lang: str):
+    send_message(i18n.t("help.text", lang), chat_id, reply_markup=main_keyboard(lang))
 
 
 # ── Dispatch ────────────────────────────────────────────────────
 
 # Public commands — anyone can use
 PUBLIC_COMMANDS = {
-    "/price": lambda cid, _: cmd_price(cid),
-    "/predict": lambda cid, _: cmd_predict(cid),
-    "/macro": lambda cid, _: cmd_macro(cid),
+    "/price": lambda cid, _, lang: cmd_price(cid, lang),
+    "/predict": lambda cid, _, lang: cmd_predict(cid, lang),
+    "/macro": lambda cid, _, lang: cmd_macro(cid, lang),
     "/chart": cmd_chart,
     "/history": cmd_history,
     "/alert": cmd_alert,
-    "/alerts": lambda cid, _: cmd_alerts(cid),
+    "/alerts": lambda cid, _, lang: cmd_alerts(cid, lang),
     "/delalert": cmd_delalert,
-    "/settings": lambda cid, _: cmd_settings(cid),
+    "/settings": lambda cid, _, lang: cmd_settings(cid, lang),
     "/mute": cmd_mute,
     "/unmute": cmd_unmute,
     "/quiet": cmd_quiet,
-    "/subscribe": lambda cid, _: cmd_subscribe(cid),
-    "/unsubscribe": lambda cid, _: cmd_unsubscribe(cid),
-    "/help": lambda cid, _: cmd_help(cid),
-    "/start": lambda cid, _: cmd_help(cid),
+    "/lang": cmd_lang,
+    "/language": cmd_lang,
+    "/subscribe": lambda cid, _, lang: cmd_subscribe(cid, lang),
+    "/unsubscribe": lambda cid, _, lang: cmd_unsubscribe(cid, lang),
+    "/help": lambda cid, _, lang: cmd_help(cid, lang),
+    "/start": lambda cid, _, lang: cmd_help(cid, lang),
 }
 
 # Owner-only commands — require matching TELEGRAM_CHAT_ID
@@ -872,7 +810,7 @@ OWNER_COMMANDS = {
     "/sold": cmd_sold,
     "/edit": cmd_edit,
     "/delete": cmd_delete,
-    "/portfolio": lambda cid, _: cmd_portfolio(cid),
+    "/portfolio": lambda cid, _, lang: cmd_portfolio(cid, lang),
     "/setthreshold": cmd_setthreshold,
     "/setrisethreshold": cmd_setrisethreshold,
 }
@@ -883,8 +821,10 @@ COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}
 def _parse_command(text: str) -> tuple:
     """Parse '/cmd@bot args' -> (cmd, args), with prefix-glue recovery.
 
-    Handles user typos like '/bought5000' or '/bought<5000>' by splitting the
-    known command prefix off and treating the remainder as args.
+    Recovers the bracketed template form users paste from /help — '/bought<5000>'
+    becomes ('/bought', '5000'). Digits glued directly to the word ('/bought5000')
+    cannot be split unambiguously and are left alone, so they surface as an
+    unknown command rather than a silently misread amount.
     """
     parts = text.split(maxsplit=1)
     cmd = parts[0].lower().split("@")[0]
@@ -933,24 +873,25 @@ def dispatch_update(update: dict) -> bool:
     # public bot where a missing env var would expose portfolio commands.)
     is_owner = bool(TG_CHAT_ID) and (chat_id == TG_CHAT_ID)
 
+    # Resolved once and threaded into the handler, so rendering a message with
+    # dozens of strings costs no extra Gist round-trips.
+    lang = storage.get_user_lang(chat_id)
+
     handler = COMMANDS.get(cmd)
     if not handler:
         safe_cmd = html_module.escape(cmd)
-        send_message(
-            f"❓ Unknown command: {safe_cmd}\nType /help for available commands",
-            chat_id,
-        )
+        send_message(i18n.t("err.unknown_command", lang, cmd=safe_cmd), chat_id)
         return False
 
     if cmd in OWNER_COMMANDS and not is_owner:
         print(f"[bot] Owner-only command '{cmd}' from unauthorized chat: {chat_id}")
-        send_message("🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်", chat_id)
+        send_message(i18n.t("err.owner_only", lang), chat_id)
         return False
 
-    print(f"[bot] Command: {cmd} args='{args}' chat={chat_id}")
+    print(f"[bot] Command: {cmd} args='{args}' chat={chat_id} lang={lang}")
     try:
-        handler(chat_id, args)
+        handler(chat_id, args, lang)
     except Exception as e:
         print(f"[bot] Command error: {e}")
-        send_message(f"⚠️ Error: {html_module.escape(str(e))}", chat_id)
+        send_message(i18n.t("err.generic", lang, error=html_module.escape(str(e))), chat_id)
     return True

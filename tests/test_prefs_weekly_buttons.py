@@ -102,16 +102,16 @@ def test_cmd_mute_and_quiet(monkeypatch):
     monkeypatch.setattr(bot_core, "send_message",
                         lambda text, chat_id="", **kw: sent.append(text))
 
-    bot_core.cmd_mute("111", "evening")
+    bot_core.cmd_mute("111", "evening", "my")
     assert storage.get_user_prefs("111")["evening"] is False
-    bot_core.cmd_unmute("111", "evening")
+    bot_core.cmd_unmute("111", "evening", "my")
     assert storage.get_user_prefs("111")["evening"] is True
-    bot_core.cmd_mute("111", "bogus")
+    bot_core.cmd_mute("111", "bogus", "my")
     assert any("Usage" in t for t in sent)
 
-    bot_core.cmd_quiet("111", "22-7")
+    bot_core.cmd_quiet("111", "22-7", "my")
     assert storage.get_user_prefs("111")["quiet"] == "22-7"
-    bot_core.cmd_quiet("111", "off")
+    bot_core.cmd_quiet("111", "off", "my")
     assert storage.get_user_prefs("111")["quiet"] is None
 
 
@@ -149,7 +149,7 @@ def test_callback_query_dispatches_command(monkeypatch):
     monkeypatch.setattr(bot_core, "answer_callback_query",
                         lambda cb_id: acked.append(cb_id))
     called = {}
-    monkeypatch.setattr(bot_core, "cmd_price", lambda cid: called.setdefault("cid", cid))
+    monkeypatch.setattr(bot_core, "cmd_price", lambda cid, lang: called.setdefault("cid", cid))
 
     update = {"callback_query": {
         "id": "cb1",
@@ -175,6 +175,6 @@ def test_help_includes_keyboard(monkeypatch):
         captured["markup"] = reply_markup
 
     monkeypatch.setattr(bot_core, "send_message", fake_send)
-    bot_core.cmd_help("111")
-    assert captured["markup"] == bot_core.MAIN_KEYBOARD
+    bot_core.cmd_help("111", "my")
+    assert captured["markup"] == bot_core.main_keyboard("my")
     assert any("/price" in str(b) for row in captured["markup"]["inline_keyboard"] for b in row)

@@ -14,6 +14,8 @@ import base64
 
 import pytz
 
+import i18n
+
 # Training is scheduled against Bangkok wall-clock time, so `last_trained` must
 # be stamped in the same zone as the date the caller compares it to.
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
@@ -455,7 +457,7 @@ def train_model(history: list) -> dict | None:
     }
 
 
-def predict(history: list, model_data: dict) -> dict:
+def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
     """Make predictions using trained models + technical analysis.
 
     Returns prediction for each horizon with confidence.
@@ -473,24 +475,25 @@ def predict(history: list, model_data: dict) -> dict:
     # buy_score < 0 = overbought/rising = WAIT
     score = ta.get("buy_score", 0)
     if score > 1:
-        result["ta_outlook"] = "🟢 STRONG BUY — ဈေး oversold ဖြစ်နေ၊ ဝယ်ရန် အကောင်းဆုံးအချိန်"
+        result["ta_outlook"] = i18n.t("ta.strong_buy", lang)
     elif score > 0.3:
-        result["ta_outlook"] = "🟡 BUY — ဈေးကျနေ၊ ဝယ်ရန် စဉ်းစားပါ"
+        result["ta_outlook"] = i18n.t("ta.buy", lang)
     elif score > -0.3:
-        result["ta_outlook"] = "⚪ HOLD — ဈေးတည်ငြိမ်နေ၊ စောင့်ကြည့်ပါ"
+        result["ta_outlook"] = i18n.t("ta.hold", lang)
     elif score > -1:
-        result["ta_outlook"] = "🟠 WAIT — ဈေးတက်နေ၊ ဝယ်ဖို့ မသင့်သေး"
+        result["ta_outlook"] = i18n.t("ta.wait", lang)
     else:
-        result["ta_outlook"] = "🔴 OVERBOUGHT — ဈေးအလွန်မြင့်နေ၊ မဝယ်သင့်"
+        result["ta_outlook"] = i18n.t("ta.overbought", lang)
 
     # ML predictions (if models exist)
     models_dict = model_data.get("models", {})
     if not models_dict or len(history) < 27:
         result["ml_available"] = False
         if len(history) >= 100:
-            result["ml_note"] = f"Data {len(history)} ခု ရှိပြီ — 3am BKK တွင် auto-train ဖြစ်ပါမည်"
+            result["ml_note"] = i18n.t("predict.ml_ready", lang, n=len(history))
         else:
-            result["ml_note"] = f"Data {len(history)}/100 — {100 - len(history)} ခု ထပ်လိုပါသေးသည်"
+            result["ml_note"] = i18n.t("predict.ml_collecting", lang,
+                                       n=len(history), need=100 - len(history))
         return result
 
     try:
@@ -541,19 +544,16 @@ def predict(history: list, model_data: dict) -> dict:
         if not edged:
             # Honesty: none of the models show real predictive skill. Don't
             # dress up coin-flips as a forecast.
-            result["combined_outlook"] = (
-                "⚠️ ML models show no historical edge over a coin-flip — "
-                "treat ML as noise; rely on the TA signal below"
-            )
+            result["combined_outlook"] = i18n.t("ta.no_edge", lang)
         else:
             up_votes = sum(1 for p in edged if p.get("direction") == "UP")
             total = len(edged)
             if up_votes > total / 2:
-                result["combined_outlook"] = "ML models (with edge) lean BULLISH"
+                result["combined_outlook"] = i18n.t("ta.bullish", lang)
             elif up_votes < total / 2:
-                result["combined_outlook"] = "ML models (with edge) lean BEARISH — consider buying"
+                result["combined_outlook"] = i18n.t("ta.bearish", lang)
             else:
-                result["combined_outlook"] = "ML models (with edge) are MIXED"
+                result["combined_outlook"] = i18n.t("ta.mixed", lang)
 
     return result
 
@@ -726,16 +726,21 @@ def get_trend_summary(history: list) -> dict:
     return result
 
 
-def format_prediction_message(prediction: dict) -> str:
-    """Format prediction results into a Telegram-friendly message."""
-    lines = ["🔮 ရွှေဈေး ခန့်မှန်းချက်", "━━━━━━━━━━━━━━━"]
+def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
+    """Format prediction results into a Telegram-friendly message.
+
+    Indicator names (RSI, MACD, Bollinger) stay untranslated on purpose — they
+    are read as symbols in every locale.
+    """
+    lines = [i18n.t("predict.title", lang), "━━━━━━━━━━━━━━━"]
 
     ta = prediction.get("technical_analysis", {})
 
     # Current price context
     if ta.get("current_price"):
         usd_line = f" | ${prediction['usd_oz']}/oz" if prediction.get("usd_oz") else ""
-        lines.append(f"💰 လက်ရှိဈေး: ฿{ta['current_price']:,.0f}/g{usd_line}")
+        lines.append(i18n.t("predict.current", lang,
+                            price=ta["current_price"], usd=usd_line))
 
     # RSI with visual bar
     if ta.get("rsi") is not None:
@@ -796,12 +801,13 @@ def format_prediction_message(prediction: dict) -> str:
     # Overall TA signal
     lines.append("━━━━━━━━━━━━━━━")
     if ta.get("overall_signal"):
-        lines.append(f"🎯 Technical Signal: {ta['overall_signal']} (score: {ta.get('buy_score', '?')})")
+        lines.append(i18n.t("predict.tech_signal", lang,
+                            signal=ta["overall_signal"], score=ta.get("buy_score", "?")))
 
     # ML Predictions
     if prediction.get("predictions"):
         lines.append("")
-        lines.append("🤖 ML Predictions:")
+        lines.append(i18n.t("predict.ml_header", lang))
         for horizon, pred in sorted(prediction["predictions"].items()):
             if "direction" in pred:
                 arrow = "🟢" if pred["direction"] == "UP" else "🔴"
@@ -820,7 +826,7 @@ def format_prediction_message(prediction: dict) -> str:
                 lines.append(f"  ⚠️ {horizon}: {pred['error']}")
 
         if prediction.get("ml_has_edge") is False:
-            lines.append("  ⚠️ No model beats a coin-flip out-of-sample — ML is noise here.")
+            lines.append(i18n.t("predict.no_edge_note", lang))
 
     # Live (real-world) hit-rate from the prediction tracker
     rates = prediction.get("hit_rates") or {}
@@ -830,7 +836,7 @@ def format_prediction_message(prediction: dict) -> str:
             f"{h}: {s['hit_pct']}% (n={s['n']})"
             for h, s in sorted(scored.items())
         ]
-        lines.append(f"🎯 Live hit-rate: {' | '.join(parts)}")
+        lines.append(i18n.t("predict.live_hit_rate", lang, parts=" | ".join(parts)))
 
     # Final Outlook
     lines.append("━━━━━━━━━━━━━━━")
@@ -840,7 +846,7 @@ def format_prediction_message(prediction: dict) -> str:
         lines.append(f"📋 {prediction['ta_outlook']}")
 
     if not prediction.get("ml_available"):
-        note = prediction.get("ml_note", "")
-        lines.append(f"ℹ️ ML: {note}")
+        lines.append(i18n.t("predict.ml_note", lang,
+                            note=prediction.get("ml_note", "")))
 
     return "\n".join(lines)

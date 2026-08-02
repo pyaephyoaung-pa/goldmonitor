@@ -11,6 +11,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 - 📊 **Portfolio Tracking** — ဝယ်ယူမှု မှတ်တမ်း + P&L tracking
 - 🤖 **Interactive Bot** — Telegram commands (/price, /predict, /bought, /portfolio)
 - 🌐 **Public Bot** — ဘယ်သူမဆို ဈေးကြည့်နိုင်၊ subscribe လုပ်နိုင်
+- 🗣 **3 Languages** — English / မြန်မာ / ไทย, per-user via `/lang`
 - 📈 **Multi-timeframe Signals** — 1h, 4h, 24h, 7d trends ကို ယှဉ်ကြည့်
 - 🌙 **Rich Evening Summary** — trends, portfolio P&L, prediction outlook
 - 💾 **Persistent Storage** — GitHub Gist ဖြင့် data ကို store
@@ -36,6 +37,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/mute morning\|evening\|alerts` | 🔕 Category တစ်ခု ပိတ်ပါ |
 | `/unmute morning\|evening\|alerts` | 🔔 ပြန်ဖွင့်ပါ |
 | `/quiet 22-7` | 🤫 Quiet hours (BKK) — `/quiet off` ဖြင့် ပိတ်ပါ |
+| `/lang en\|my\|th` | 🌐 ဘာသာစကား ပြောင်းပါ (English / မြန်မာ / ไทย) |
 | `/help` | ❓ Commands အားလုံး + tap-able buttons |
 
 ### 🔒 Owner-Only Commands (bot owner သီးသန့်)
@@ -72,6 +74,8 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 > separately by the gap-down alert vs yesterday's close.
 > ⚙️ Subscribers can `/mute` categories or set `/quiet 22-7` hours — alerts
 > respect each user's preferences.
+> 🌐 Each user also picks their own language with `/lang` — the same broadcast
+> is rendered once per language actually in use, not once per subscriber.
 
 **Drop Alerts (5 levels, threshold = 0.5% default):**
 
@@ -181,11 +185,40 @@ commands fail closed if `TELEGRAM_CHAT_ID` is unset.
 
 ---
 
+## 🌐 Language (English / မြန်မာ / ไทย)
+
+Every alert and command reply is localised per user.
+
+```
+/lang          # show the current language + options
+/lang en       # English
+/lang my       # မြန်မာ  (default)
+/lang th       # ไทย
+```
+
+The choice is stored per chat alongside the other notification preferences and
+shows up in `/settings`. **Myanmar stays the default**, so existing users see
+no change unless they opt in. Aliases are accepted (`english`, `mm`, `ไทย`, …).
+
+Broadcasts are rendered **once per language present among the recipients** —
+a 500-subscriber alert still builds at most three message bodies.
+
+Indicator and ticker names (RSI, MACD, DXY, VIX, USD/oz) are deliberately left
+untranslated; they read as symbols in all three locales.
+
+**Adding a language:** add its code to `LANGUAGES` and `_ALIASES` in
+`i18n.py`, then fill in the new entry for every key in `STRINGS`. The test
+suite fails on any missing translation or mismatched `{placeholder}` set, so
+an incomplete language cannot ship silently.
+
+---
+
 ## 📁 Files
 
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
 ├── goldapi.py               # Price + FX fetch, multi-source fallback (shared)

@@ -11,6 +11,8 @@ import os
 from datetime import datetime
 import pytz
 
+import i18n
+
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 GITHUB_TOKEN = os.environ.get("GIST_GITHUB_TOKEN", "")
 GIST_ID = os.environ.get("GIST_ID", "")
@@ -455,8 +457,14 @@ def remove_subscriber(chat_id: str) -> bool:
 # Categories: "morning", "evening", "alerts" (drop/rise broadcasts).
 # "quiet" is "HH-HH" (BKK hours, suppress from first up to second) or None.
 
-PREF_DEFAULTS = {"morning": True, "evening": True, "alerts": True, "quiet": None}
+PREF_DEFAULTS = {"morning": True, "evening": True, "alerts": True, "quiet": None,
+                 "lang": i18n.DEFAULT_LANG}
 PREF_CATEGORIES = ("morning", "evening", "alerts")
+
+
+def get_user_lang(chat_id: str) -> str:
+    """The user's interface language code, always one we support."""
+    return i18n.normalize(get_user_prefs(chat_id).get("lang"))
 
 
 def get_user_prefs(chat_id: str) -> dict:

@@ -109,10 +109,10 @@ def test_cmd_portfolio_renders_when_fully_sold(monkeypatch):
     monkeypatch.setattr(bot_core, "send_message",
                         lambda text, cid="", **k: sent.append(text))
 
-    bot_core.cmd_portfolio("111")
+    bot_core.cmd_portfolio("111", "my")
 
     assert len(sent) == 1
-    assert "Realized P&L" in sent[0]
+    assert "Realized P&amp;L" in sent[0]  # escaped for Telegram HTML mode
     assert "Error" not in sent[0]
 
 
@@ -131,11 +131,11 @@ def test_history_clamps_zero_and_negative(monkeypatch):
 
     for args in ("0", "-5"):
         sent.clear()
-        bot_core.cmd_history("111", args)
+        bot_core.cmd_history("111", args, "my")
         assert sent[0].startswith("📊 <b>ရွှေဈေး 1-Day History</b>"), sent[0]
 
     sent.clear()
-    bot_core.cmd_history("111", "3")
+    bot_core.cmd_history("111", "3", "my")
     assert "3-Day History" in sent[0]
 
 
@@ -169,7 +169,7 @@ def test_cmd_chart_caption_matches_rendered_range(monkeypatch):
     monkeypatch.setattr(bot_core, "send_photo",
                         lambda url, caption, cid="": captions.append(caption) or {"ok": True})
 
-    bot_core.cmd_chart("111", "1")
+    bot_core.cmd_chart("111", "1", "my")
 
     assert len(captions) == 1
     assert "High:" in captions[0]
@@ -291,10 +291,10 @@ def test_429_retry_preserves_reply_markup(monkeypatch):
 
     monkeypatch.setattr(bot_core.requests, "post", fake_post)
 
-    bot_core.send_message("hi", "111", reply_markup=bot_core.MAIN_KEYBOARD)
+    bot_core.send_message("hi", "111", reply_markup=bot_core.main_keyboard("my"))
 
     assert len(posts) == 2
-    assert posts[1].get("reply_markup") == bot_core.MAIN_KEYBOARD
+    assert posts[1].get("reply_markup") == bot_core.main_keyboard("my")
 
 
 # ── Webhook fails closed without a configured secret ────────────
@@ -305,7 +305,7 @@ def test_setthreshold_reports_real_level_ladder(monkeypatch):
     monkeypatch.setattr(bot_core, "send_message",
                         lambda text, cid="", **k: sent.append(text))
 
-    bot_core.cmd_setthreshold("111", "0.5")
+    bot_core.cmd_setthreshold("111", "0.5", "my")
 
     # The old text promised a "Strong alert" at 1.5x (0.75%), a tier the
     # monitor never fires — its levels are 1x..5x.

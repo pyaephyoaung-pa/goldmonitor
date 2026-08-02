@@ -21,6 +21,7 @@ import traceback
 from datetime import datetime
 import pytz
 
+import i18n
 import storage
 import predictor
 import goldapi
@@ -53,8 +54,14 @@ except Exception:
 
 # ── Telegram Notify ─────────────────────────────────────────────
 
-def notify(msg: str, category: str = "alerts"):
+def notify(msg, category: str = "alerts"):
     """Send message to owner + all subscribers, honoring per-user preferences.
+
+    `msg` is either a plain string (same text for everyone) or a callable
+    `lang -> str`, which is how every localised broadcast is passed. The
+    callable is invoked at most ONCE PER LANGUAGE actually present among the
+    recipients, not once per recipient, so a 500-subscriber broadcast still
+    only builds three message bodies.
 
     `category` is one of "morning" / "evening" / "alerts" — users can mute
     categories (/mute) or set quiet hours (/quiet); both are checked here.
@@ -63,7 +70,7 @@ def notify(msg: str, category: str = "alerts"):
     """
     if not TG_BOT_TOKEN:
         print("[WARN] Telegram bot token not set")
-        print(msg)
+        print(msg(i18n.DEFAULT_LANG) if callable(msg) else msg)
         return
 
     # Subscribers and prefs live in the same Gist file — one read for both.
@@ -84,11 +91,21 @@ def notify(msg: str, category: str = "alerts"):
               f"skipped by prefs ({category})")
     recipients = allowed
 
+    rendered = {}
+
+    def body_for(chat_id) -> str:
+        if not callable(msg):
+            return msg
+        lang = i18n.normalize(all_prefs.get(str(chat_id), {}).get("lang"))
+        if lang not in rendered:
+            rendered[lang] = msg(lang)
+        return rendered[lang]
+
     for i, chat_id in enumerate(recipients):
         # Telegram broadcast limit is ~30 msg/s — pace sends to stay well under.
         if i:
             time.sleep(0.1)
-        resp = bot_core.send_message(msg, chat_id)
+        resp = bot_core.send_message(body_for(chat_id), chat_id)
         if resp and not resp.get("ok") and resp.get("error_code") == 403:
             print(f"[Telegram] Removing blocked subscriber: {chat_id}")
             storage.remove_subscriber(chat_id)
@@ -104,7 +121,7 @@ def rise_pct(open_p, cur):
     return ((cur - open_p) / open_p) * 100
 
 
-def build_weekly_block(history: list) -> str:
+def build_weekly_block(history: list, lang: str | None = None) -> str:
     """Weekly recap appended to the SUNDAY evening summary.
 
     Computed from the hourly price history: week change, range, and the
@@ -134,13 +151,13 @@ def build_weekly_block(history: list) -> str:
     best = max(day_moves, key=day_moves.get)
     worst = min(day_moves, key=day_moves.get)
 
-    arrow = "📈" if week_change >= 0 else "📉"
-    return (
-        f"\n\n📅 <b>သီတင်းပတ် အနှစ်ချုပ် (7d)</b>\n"
-        f"  {arrow} Week: {week_change:+.2f}% ({fmt(week_open)} → {fmt(week_close)})\n"
-        f"  ⬆️ High: {fmt(max(prices))} | ⬇️ Low: {fmt(min(prices))}\n"
-        f"  🏆 Best day: {best[5:]} ({day_moves[best]:+.2f}%)\n"
-        f"  💔 Worst day: {worst[5:]} ({day_moves[worst]:+.2f}%)"
+    return i18n.t(
+        "monitor.weekly", lang,
+        arrow="📈" if week_change >= 0 else "📉",
+        change=week_change, open=fmt(week_open), close=fmt(week_close),
+        high=fmt(max(prices)), low=fmt(min(prices)),
+        best_day=best[5:], best=day_moves[best],
+        worst_day=worst[5:], worst=day_moves[worst],
     )
 
 
@@ -156,7 +173,7 @@ def main():
     # ── Fetch Price ─────────────────────────────────────────────
     thb_gram, usd_oz, thb_rate = goldapi.get_gold_price()
     if thb_gram is None:
-        notify("⚠️ <b>YLG Monitor</b>\nAPI error — ဈေးနှုန်း ယူမရပါ")
+        notify(lambda lang: i18n.t("monitor.api_error", lang))
         return
 
     print(f"  Gold: {fmt(thb_gram)}/g (${usd_oz}/oz) [THB rate: {thb_rate}]")
@@ -198,50 +215,43 @@ def main():
     # skipped the morning message entirely. Decoupling the two flags is what
     # fixes that; open_price still anchors at the day boundary (see above).
     if 6 <= hour <= 14 and not state.get("morning_sent"):
-        # Include trend if we have history
-        trend_lines = ""
+        # Trend / TA fragments are language-independent numbers; only their
+        # labels differ, so compute the values once and format per language.
+        trend_parts = []
         if len(history) >= 24:
-            trend = predictor.get_trend_summary(history)
-            parts = []
-            if "change_24h" in trend:
-                parts.append(f"24h: {trend['change_24h']:+.3f}%")
-            if "change_7d" in trend:
-                parts.append(f"7d: {trend['change_7d']:+.3f}%")
-            if parts:
-                trend_lines = f"\n📊 Trend: {' | '.join(parts)}"
+            trend_now = predictor.get_trend_summary(history)
+            if "change_24h" in trend_now:
+                trend_parts.append(f"24h: {trend_now['change_24h']:+.3f}%")
+            if "change_7d" in trend_now:
+                trend_parts.append(f"7d: {trend_now['change_7d']:+.3f}%")
 
-        # Quick TA signal
-        ta_line = ""
+        morning_signal = ""
         if len(history) >= 14:
-            ta = predictor.analyze(history)
-            if ta.get("overall_signal"):
-                ta_line = f"\n🎯 Signal: {ta['overall_signal']}"
+            ta_now = predictor.analyze(history)
+            morning_signal = ta_now.get("overall_signal") or ""
 
-        # Macro & fear context (DXY / US10Y / VIX). Omitted if unavailable.
-        macro_block = signals.format_macro_block()
-        macro_lines = f"\n━━━━━━━━━━━━━━━\n{macro_block}" if macro_block else ""
-
+        # Fetch macro ONCE, then render it in each recipient language.
+        macro_data = signals.fetch_macro()
         gb = gold_breakdown(thb_gram)
-        notify(
-            f"🌅 <b>ရွှေဈေး မနက်ခင်း</b>\n"
-            f"📅 {time_str} (BKK)\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🥇 <b>99.99% (Pure)</b>\n"
-            f"  ဘတ်သား: {fmt(gb['baht_9999'])}\n"
-            f"  1g: {fmt(gb['gram_9999'])}\n"
-            f"🥈 <b>96.50%</b>\n"
-            f"  ဘတ်သား: {fmt(gb['baht_9650'])}\n"
-            f"  1g: {fmt(gb['gram_9650'])}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🌐 Spot     : ${usd_oz}/oz\n"
-            f"💱 Rate     : 1 USD = {thb_rate} THB\n"
-            f"⚙️ Alert    : ↓{DROP_THRESHOLD}% drop | ↑{RISE_THRESHOLD}% rise"
-            f"{trend_lines}{ta_line}"
-            f"{macro_lines}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"✅ Monitoring စပြီ!",
-            "morning",
-        )
+
+        def build_morning(lang):
+            extras = ""
+            if trend_parts:
+                extras += i18n.t("monitor.trend", lang, parts=" | ".join(trend_parts))
+            if morning_signal:
+                extras += i18n.t("monitor.ta_signal", lang, signal=morning_signal)
+            block = signals.format_macro_block(macro_data, lang)
+            if block:
+                extras += f"\n━━━━━━━━━━━━━━━\n{block}"
+            return i18n.t(
+                "monitor.morning", lang, when=time_str,
+                baht_9999=fmt(gb["baht_9999"]), gram_9999=fmt(gb["gram_9999"]),
+                baht_9650=fmt(gb["baht_9650"]), gram_9650=fmt(gb["gram_9650"]),
+                usd_oz=usd_oz, thb_rate=thb_rate,
+                drop=DROP_THRESHOLD, rise=RISE_THRESHOLD, extras=extras,
+            )
+
+        notify(build_morning, "morning")
         state["morning_sent"] = True
         storage.save_day_state(state)
 
@@ -254,15 +264,13 @@ def main():
 
     # ── Per-user Price-level Alerts (one-shot, set via /alert) ──
     for chat_id, alert in storage.pop_triggered_alerts(thb_gram):
-        arrow = "⬆️" if alert["dir"] == "above" else "⬇️"
+        # Level alerts go to one user each, in that user's own language.
         bot_core.send_message(
-            f"🎯 <b>Price Alert ထိပြီ!</b>\n"
-            f"⏰ {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"{arrow} သတ်မှတ်ချက်: {alert['dir']} {fmt(alert['price'])}/g\n"
-            f"💰 လက်ရှိဈေး : {fmt(thb_gram)}/g\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"ℹ️ ဤ alert ကို auto ဖျက်ပြီးပါပြီ — /alert ဖြင့် အသစ်သတ်မှတ်နိုင်ပါသည်",
+            i18n.t("monitor.level_alert", storage.get_user_lang(chat_id),
+                   when=time_str,
+                   arrow="⬆️" if alert["dir"] == "above" else "⬇️",
+                   dir=alert["dir"], target=fmt(alert["price"]),
+                   price=fmt(thb_gram)),
             chat_id,
         )
         print(f"  Level alert fired: {chat_id} {alert['dir']} {alert['price']}")
@@ -272,34 +280,35 @@ def main():
     trend = predictor.get_trend_summary(history) if len(history) >= 2 else {}
 
     # ── Drop Alerts (5 levels, equal spacing) ─────────────────────
+    # Titles and advice are i18n keys, resolved per recipient language.
     DROP_LEVELS = [
-        {"mult": 1, "key": "notified_drop_1", "emoji": "🟡", "title": "ရွှေဈေး ကျဆင်း", "advice": "👉 YLG Get Gold ဖွင့်ဝယ်ပါ!"},
-        {"mult": 2, "key": "notified_drop_2", "emoji": "🟠", "title": "ရွှေဈေး ဆက်ကျဆင်း", "advice": "💡 DCA ဝယ်ရန် စဉ်းစားပါ!"},
-        {"mult": 3, "key": "notified_drop_3", "emoji": "🔴", "title": "ရွှေဈေး ကြီးစွာ ကျဆင်း", "advice": "🔥 DCA ထပ်ဝယ်ရန် အခွင့်ကောင်း!"},
-        {"mult": 4, "key": "notified_drop_4", "emoji": "🔴🔴", "title": "ရွှေဈေး ပြင်းထန်စွာ ကျ", "advice": "⚠️ သတိထားပြီး DCA စဉ်းစားပါ!"},
-        {"mult": 5, "key": "notified_drop_5", "emoji": "🚨", "title": "ရွှေဈေး အကြီးအကျယ် ကျဆင်း", "advice": "🏦 အရေးပေါ် — portfolio စစ်ဆေးပါ!"},
+        {"mult": 1, "key": "notified_drop_1", "emoji": "🟡", "str": "drop.1"},
+        {"mult": 2, "key": "notified_drop_2", "emoji": "🟠", "str": "drop.2"},
+        {"mult": 3, "key": "notified_drop_3", "emoji": "🔴", "str": "drop.3"},
+        {"mult": 4, "key": "notified_drop_4", "emoji": "🔴🔴", "str": "drop.4"},
+        {"mult": 5, "key": "notified_drop_5", "emoji": "🚨", "str": "drop.5"},
     ]
 
-    ta_signal = f"\n🎯 TA Signal: {ta['overall_signal']}" if ta.get("overall_signal") else ""
-    rsi_line = f"\n📊 RSI: {ta['rsi']}" if ta.get("rsi") else ""
+    def ta_block(lang):
+        """TA suffix shared by the drop / rise / gap alerts."""
+        out = ""
+        if ta.get("overall_signal"):
+            out += i18n.t("monitor.ta_signal", lang, signal=ta["overall_signal"])
+        if ta.get("rsi"):
+            out += "\n" + i18n.t("price.rsi", lang, value=ta["rsi"])
+        return out
 
     for level in DROP_LEVELS:
         threshold = DROP_THRESHOLD * level["mult"]
         if d >= threshold and not state.get(level["key"]):
-            notify(
-                f"{level['emoji']} <b>{level['title']}!</b>\n"
-                f"⏰ {time_str}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-                f"🌐 Spot    : ${usd_oz}/oz\n"
-                f"📈 Open    : {fmt(state['open_price'])}/g\n"
-                f"📉 ကျဆင်းမှု : {d:.2f}% (Level {level['mult']})\n"
-                f"⬇️ ယနေ့ Low: {fmt(state['day_low'])}/g"
-                f"{ta_signal}{rsi_line}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"{level['advice']}\n"
-                f"📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"
-            )
+            notify(lambda lang, lv=level: i18n.t(
+                "monitor.drop", lang, emoji=lv["emoji"],
+                title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
+                price=fmt(thb_gram), usd_oz=usd_oz,
+                open=fmt(state["open_price"]), pct=d, level=lv["mult"],
+                low=fmt(state["day_low"]), ta=ta_block(lang),
+                advice=i18n.t(f"{lv['str']}.advice", lang),
+            ))
             state[level["key"]] = True
 
     # Reset drop notifications if price recovers
@@ -317,48 +326,34 @@ def main():
     if prev_close and not state.get("notified_gap"):
         gap = drop_pct(prev_close, thb_gram)  # > 0 means down vs yesterday
         if gap >= GAP_THRESHOLD:
-            notify(
-                f"🌃 <b>ည/အိပ်ရာထ ဈေးကျ (Gap Down)!</b>\n"
-                f"⏰ {time_str}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"💰 လက်ရှိ   : {fmt(thb_gram)}/g\n"
-                f"🌐 Spot     : ${usd_oz}/oz\n"
-                f"📕 မနေ့ပိတ် : {fmt(prev_close)}/g\n"
-                f"📉 ကျဆင်းမှု : {gap:.2f}% (မနေ့ပိတ်ဈေးနှင့်)\n"
-                f"⬇️ ယနေ့ Low : {fmt(state['day_low'])}/g"
-                f"{ta_signal}{rsi_line}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"👉 ည/နံနက်ပိုင်း ဈေးကျ — DCA အခွင့်အရေး စစ်ပါ!\n"
-                f"📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"
-            )
+            notify(lambda lang: i18n.t(
+                "monitor.gap", lang, when=time_str, price=fmt(thb_gram),
+                usd_oz=usd_oz, prev_close=fmt(prev_close), pct=gap,
+                low=fmt(state["day_low"]), ta=ta_block(lang),
+            ))
             state["notified_gap"] = True
 
     # ── Rise Alerts (5 levels, equal spacing) ──────────────────
     RISE_LEVELS = [
-        {"mult": 1, "key": "notified_rise_1", "emoji": "🟢", "title": "ရွှေဈေး တက်နေပါတယ်", "advice": "💎 Portfolio တန်ဖိုး တက်နေပါပြီ!"},
-        {"mult": 2, "key": "notified_rise_2", "emoji": "🟢🟢", "title": "ရွှေဈေး ဆက်တက်နေတယ်", "advice": "📊 Profit ယူရန် စဉ်းစားပါ!"},
-        {"mult": 3, "key": "notified_rise_3", "emoji": "🟣", "title": "ရွှေဈေး ကြီးစွာ တက်", "advice": "💰 Partial profit ယူရန် စဉ်းစားပါ!"},
-        {"mult": 4, "key": "notified_rise_4", "emoji": "🟣🟣", "title": "ရွှေဈေး ပြင်းထန်စွာ တက်", "advice": "⚡ ဈေးမြင့်ချိန် — profit ယူပါ!"},
-        {"mult": 5, "key": "notified_rise_5", "emoji": "🚀", "title": "ရွှေဈေး အကြီးအကျယ် တက်", "advice": "🏆 အမြတ်ကြီး — sell စဉ်းစားပါ!"},
+        {"mult": 1, "key": "notified_rise_1", "emoji": "🟢", "str": "rise.1"},
+        {"mult": 2, "key": "notified_rise_2", "emoji": "🟢🟢", "str": "rise.2"},
+        {"mult": 3, "key": "notified_rise_3", "emoji": "🟣", "str": "rise.3"},
+        {"mult": 4, "key": "notified_rise_4", "emoji": "🟣🟣", "str": "rise.4"},
+        {"mult": 5, "key": "notified_rise_5", "emoji": "🚀", "str": "rise.5"},
     ]
 
     r = rise_pct(state["open_price"], thb_gram)
     for level in RISE_LEVELS:
         threshold = RISE_THRESHOLD * level["mult"]
         if r >= threshold and not state.get(level["key"]):
-            notify(
-                f"{level['emoji']} <b>{level['title']}!</b>\n"
-                f"⏰ {time_str}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"💰 လက်ရှိ  : {fmt(thb_gram)}/g\n"
-                f"🌐 Spot    : ${usd_oz}/oz\n"
-                f"📈 Open    : {fmt(state['open_price'])}/g\n"
-                f"🚀 တက်မှု   : +{r:.2f}% (Level {level['mult']})\n"
-                f"⬆️ ယနေ့ High: {fmt(state['day_high'])}/g"
-                f"{ta_signal}{rsi_line}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"{level['advice']}"
-            )
+            notify(lambda lang, lv=level: i18n.t(
+                "monitor.rise", lang, emoji=lv["emoji"],
+                title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
+                price=fmt(thb_gram), usd_oz=usd_oz,
+                open=fmt(state["open_price"]), pct=r, level=lv["mult"],
+                high=fmt(state["day_high"]), ta=ta_block(lang),
+                advice=i18n.t(f"{lv['str']}.advice", lang),
+            ))
             state[level["key"]] = True
 
     # Reset rise notifications if price drops back
@@ -371,30 +366,17 @@ def main():
         change = -d
         arrow = "📈" if change > 0 else "📉"
 
-        # Portfolio P&L
-        portfolio_lines = ""
         pnl = storage.get_portfolio_pnl(thb_gram)
-        if pnl["num_buys"] > 0:
-            p_emoji = "🟢" if pnl["pnl_thb"] >= 0 else "🔴"
-            portfolio_lines = (
-                f"\n\n💼 <b>Portfolio:</b>\n"
-                f"  ⚖️ {pnl['total_grams']:.4f}g ({pnl['num_buys']} buys)\n"
-                f"  {p_emoji} P&L: {fmt(pnl['pnl_thb'])} ({pnl['pnl_pct']:+.2f}%)"
-            )
 
-        # Multi-timeframe trends
-        trend_lines = ""
+        evening_trend_parts = []
         if trend:
-            parts = []
-            for key, label in [("change_4h", "4h"), ("change_24h", "24h"), ("change_7d", "7d")]:
+            for key, label in [("change_4h", "4h"), ("change_24h", "24h"),
+                               ("change_7d", "7d")]:
                 if key in trend:
-                    parts.append(f"{label}: {trend[key]:+.3f}%")
-            if parts:
-                trend_lines = f"\n📊 Trends: {' | '.join(parts)}"
+                    evening_trend_parts.append(f"{label}: {trend[key]:+.3f}%")
 
         # Prediction outlook + accuracy tracking (record tonight's prediction,
         # score matured ones so the bot reports its real hit-rate over time)
-        predict_line = ""
         if len(history) >= 15:
             model_data = storage.load_model_data()
             changed = predictor.resolve_predictions(model_data, history)
@@ -405,45 +387,49 @@ def main():
             if changed:
                 # Flushed together with the day state at the end of the run.
                 pending_model_data = model_data
-            outlook = pred.get("combined_outlook") or pred.get("ta_outlook", "")
-            if outlook:
-                predict_line = f"\n🔮 Tomorrow: {outlook}"
+            evening_outlook = pred.get("combined_outlook") or pred.get("ta_outlook", "")
             rates = predictor.prediction_hit_rates(model_data)
-            scored = {h: s for h, s in rates.items() if s.get("n")}
-            if scored:
-                parts = [f"{h} {s['hit_pct']}%" for h, s in sorted(scored.items())]
-                predict_line += f"\n🎯 ML live hit-rate: {' | '.join(parts)}"
+            scored = {h: sc for h, sc in rates.items() if sc.get("n")}
+            hit_parts = [f"{h} {sc['hit_pct']}%" for h, sc in sorted(scored.items())]
+        else:
+            evening_outlook, hit_parts = "", []
 
-        # Streak info
-        streak_line = ""
-        if trend.get("streak", 0) >= 3:
-            streak_line = (
-                f"\n🔥 {trend['streak']}h consecutive "
-                f"{'rise' if trend['streak_direction'] == 'up' else 'decline'}"
+        # Fetch macro ONCE, then render it in each recipient language.
+        macro_data = signals.fetch_macro()
+
+        def build_evening(lang):
+            extras = ""
+            if evening_trend_parts:
+                extras += i18n.t("monitor.trends", lang,
+                                 parts=" | ".join(evening_trend_parts))
+            if trend.get("streak", 0) >= 3:
+                key = ("monitor.streak_up" if trend["streak_direction"] == "up"
+                       else "monitor.streak_down")
+                extras += i18n.t(key, lang, hours=trend["streak"])
+            if pnl["num_buys"] > 0:
+                extras += i18n.t(
+                    "monitor.portfolio", lang, grams=pnl["total_grams"],
+                    buys=pnl["num_buys"],
+                    emoji="🟢" if pnl["pnl_thb"] >= 0 else "🔴",
+                    pnl=fmt(pnl["pnl_thb"]), pct=pnl["pnl_pct"])
+            if evening_outlook:
+                extras += i18n.t("monitor.outlook", lang, outlook=evening_outlook)
+            if hit_parts:
+                extras += i18n.t("monitor.hit_rate", lang, parts=" | ".join(hit_parts))
+            # Weekly recap — Sundays only
+            if now.weekday() == 6:
+                extras += build_weekly_block(history, lang)
+            block = signals.format_macro_block(macro_data, lang)
+            if block:
+                extras += f"\n━━━━━━━━━━━━━━━\n{block}"
+            return i18n.t(
+                "monitor.evening", lang, when=time_str, price=fmt(thb_gram),
+                open=fmt(state["open_price"]), arrow=arrow, change=change,
+                high=fmt(state["day_high"]), low=fmt(state["day_low"]),
+                usd_oz=usd_oz, extras=extras,
             )
 
-        # Weekly recap — Sundays only
-        weekly_lines = build_weekly_block(history) if now.weekday() == 6 else ""
-
-        # Macro & fear context (DXY / US10Y / VIX). Omitted if unavailable.
-        macro_block = signals.format_macro_block()
-        macro_lines = f"\n━━━━━━━━━━━━━━━\n{macro_block}" if macro_block else ""
-
-        notify(
-            f"🌙 <b>ညနေ ရွှေဈေး အနှစ်ချုပ်</b>\n"
-            f"📅 {time_str}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 ယခု      : {fmt(thb_gram)}/g\n"
-            f"📊 Open     : {fmt(state['open_price'])}/g\n"
-            f"{arrow} ယနေ့ change : {change:+.2f}%\n"
-            f"⬆️ Day High  : {fmt(state['day_high'])}/g\n"
-            f"⬇️ Day Low   : {fmt(state['day_low'])}/g\n"
-            f"🌐 Spot: ${usd_oz}/oz"
-            f"{trend_lines}{streak_line}{portfolio_lines}{predict_line}"
-            f"{weekly_lines}{macro_lines}\n"
-            f"━━━━━━━━━━━━━━━",
-            "evening",
-        )
+        notify(build_evening, "evening")
         state["evening_sent"] = True
 
     # Remember the latest price so tomorrow can detect an overnight gap.
@@ -489,10 +475,13 @@ def run():
         traceback.print_exc()
         if TG_BOT_TOKEN and TG_CHAT_ID:
             err = str(e)[:300]
+            try:
+                owner_lang = storage.get_user_lang(TG_CHAT_ID)
+            except Exception:
+                owner_lang = i18n.DEFAULT_LANG  # storage itself may be the fault
             bot_core.send_message(
-                f"🛑 <b>Gold Monitor crashed</b>\n"
-                f"<code>{type(e).__name__}: {err}</code>\n"
-                f"Check GitHub Actions logs.",
+                i18n.t("monitor.crash", owner_lang,
+                       error=f"{type(e).__name__}: {err}"),
                 TG_CHAT_ID,
             )
         raise  # keep the Actions run red
