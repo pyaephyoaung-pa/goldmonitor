@@ -47,14 +47,46 @@ def _get_gist() -> dict:
         return {}
 
 
+def _file_content(entry: dict) -> str | None:
+    """Content of one Gist file entry, refetching if the API truncated it.
+
+    GitHub inlines file content only up to 1 MB and sets `truncated: true`
+    beyond that. model_data.json (three base64 model pickles + the prediction
+    log) is the file most likely to cross that line. Parsing a truncated body
+    raises, which used to be swallowed into an empty container — and the next
+    write then persisted that emptiness over real data. Follow `raw_url`
+    instead so a large file still reads correctly.
+    """
+    if not entry.get("truncated"):
+        return entry.get("content")
+    raw_url = entry.get("raw_url")
+    if not raw_url:
+        print("[storage] File truncated by the Gist API and no raw_url given")
+        return None
+    try:
+        r = requests.get(raw_url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        return r.text
+    except Exception as e:
+        print(f"[storage] Truncated-file refetch failed: {e}")
+        return None
+
+
 def _read_file(filename: str) -> dict | list:
-    """Read a single JSON file from the Gist."""
+    """Read a single JSON file from the Gist.
+
+    Returns an empty container when the file is absent or unreadable. Callers
+    that go on to WRITE the same file must treat an empty result as "no data
+    yet", never as "data was deleted" — see save_model_data.
+    """
     files = _get_gist()
     if filename in files:
         try:
-            return json.loads(files[filename]["content"])
-        except (json.JSONDecodeError, KeyError):
-            pass
+            content = _file_content(files[filename])
+            if content is not None:
+                return json.loads(content)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[storage] Could not parse {filename}: {e}")
     # Return appropriate empty container
     if filename in (PRICE_HISTORY_FILE, BUY_LOG_FILE):
         return []
@@ -331,8 +363,11 @@ def get_portfolio_pnl(current_price: float) -> dict:
     """Calculate P&L at current market price."""
     portfolio = get_portfolio()
     if portfolio["total_grams"] <= 0:
-        return {**portfolio, "current_value": 0, "pnl_thb": portfolio["realized_pnl"],
-                "pnl_pct": 0, "unrealized_pnl": 0}
+        # Fully sold (or nothing bought). Callers still format current_price, so
+        # this branch must carry the same keys as the normal one below.
+        return {**portfolio, "current_price": current_price, "current_value": 0,
+                "pnl_thb": portfolio["realized_pnl"], "pnl_pct": 0,
+                "unrealized_pnl": 0}
     current_value = round(portfolio["total_grams"] * current_price, 2)
     unrealized_pnl = round(current_value - portfolio["total_invested"], 2)
     total_pnl = round(unrealized_pnl + portfolio["realized_pnl"], 2)
@@ -366,6 +401,16 @@ def save_model_data(data: dict):
     _write_file(MODEL_DATA_FILE, data)
 
 
+def save_day_state_and_model(state: dict, model_data: dict):
+    """Persist day state + model data in ONE Gist PATCH.
+
+    A monitor run otherwise issues a separate write per file (and per call),
+    each a full authenticated round-trip that widens the read-modify-write race
+    on the shared Gist.
+    """
+    _write_files({DAY_STATE_FILE: state, MODEL_DATA_FILE: model_data})
+
+
 # ── Subscribers ────────────────────────────────────────────────
 def get_subscribers() -> list:
     """Get list of subscriber chat IDs."""
@@ -376,12 +421,19 @@ def get_subscribers() -> list:
 
 
 def add_subscriber(chat_id: str) -> bool:
-    """Add a subscriber. Returns True if newly added, False if already exists."""
+    """Add a subscriber. Returns True if newly added, False if already exists.
+
+    Preserves the sibling "prefs" map: this file holds BOTH the subscriber list
+    and every user's notification preferences, so writing only "chat_ids" here
+    used to reset everyone's /mute and /quiet settings on each new /subscribe.
+    """
+    data = _read_file(SUBSCRIBERS_FILE)
     subs = get_subscribers()
     if chat_id in subs:
         return False
     subs.append(chat_id)
-    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs})
+    prefs = data.get("prefs", {}) if isinstance(data, dict) else {}
+    _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs, "prefs": prefs})
     return True
 
 
@@ -456,6 +508,19 @@ def get_all_prefs() -> dict:
     """All users' prefs in one read (avoid per-recipient Gist round-trips)."""
     data = _read_file(SUBSCRIBERS_FILE)
     return data.get("prefs", {}) if isinstance(data, dict) else {}
+
+
+def get_subscribers_and_prefs() -> tuple:
+    """(chat_ids, prefs) from a SINGLE Gist read.
+
+    get_subscribers() + get_all_prefs() pull the same file twice, and _get_gist
+    downloads every file in the Gist (including the model pickles) each time.
+    Broadcast paths that need both should use this instead.
+    """
+    data = _read_file(SUBSCRIBERS_FILE)
+    if isinstance(data, list):
+        return data, {}
+    return data.get("chat_ids", []), data.get("prefs", {})
 
 
 def prefs_allow(user_prefs: dict, category: str, hour: int) -> bool:

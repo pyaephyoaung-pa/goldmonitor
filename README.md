@@ -58,13 +58,18 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 
 | အချိန် | Message |
 |---|---|
-| မနက် (first run) | 🌅 Open ဈေး + trend + TA signal |
+| မနက် 6am–2pm (once) | 🌅 Open ဈေး + trend + TA signal |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 | တနင်္ဂနွေ ညနေ | 📅 Weekly recap (week change, high/low, best/worst day) |
 
-> 🔄 Price checks run every **15 minutes** (07:00–23:55 BKK) — `*/5` was cut to
-> `*/15` + pip caching + a concurrency guard to stay inside GitHub's free
-> Actions minutes and stop overlapping runs racing on the Gist.
+> 🔄 Price checks run every **5 minutes, 24/7** — gold trades around the clock
+> on weekdays, so overnight runs are what make the gap-down alert possible.
+> Pip caching + a concurrency guard keep cost down and stop overlapping runs
+> racing on the Gist. (The repo is public, so Actions minutes are unlimited; if
+> it goes private, widen the cron to `*/15`–`*/30`.)
+> 📌 The day's **open** is therefore anchored at ~00:00 BKK, and the drop/rise
+> alerts measure from there. The move across the day boundary itself is covered
+> separately by the gap-down alert vs yesterday's close.
 > ⚙️ Subscribers can `/mute` categories or set `/quiet 22-7` hours — alerts
 > respect each user's preferences.
 
@@ -127,6 +132,18 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → **New re
 | `TELEGRAM_CHAT_ID` | Step 1 မှ chat ID |
 | `GIST_GITHUB_TOKEN` | Step 2 မှ GitHub token |
 | `GIST_ID` | Step 3 မှ Gist ID |
+
+> 🔐 **`WEBHOOK_SECRET` (Vercel webhook သုံးမည်ဆိုလျှင် မဖြစ်မနေ လိုအပ်သည်):**
+> the webhook handler **fails closed** — without this it rejects every update
+> with 403. Set the same value in the Vercel project environment and in the
+> shell you run `setup_webhook.py` from. Generate one with:
+>
+> ```bash
+> python -c "import secrets; print(secrets.token_urlsafe(32))"
+> ```
+>
+> Without it, anyone who learns the webhook URL could forge the owner's chat ID
+> and run owner-only commands against your portfolio.
 
 ### Step 5 — Push & Test
 

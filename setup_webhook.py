@@ -24,14 +24,21 @@ def set_webhook(base_url: str):
 
     webhook_url = f"{base_url.rstrip('/')}/api/webhook"
     secret = os.environ.get("WEBHOOK_SECRET", "")
+    if not secret:
+        # The handler fails closed without it, so registering the webhook now
+        # would just produce silent 403s on every update.
+        print("ERROR: WEBHOOK_SECRET is not set.")
+        print("  The webhook rejects every update unless it is configured.")
+        print("  Generate one:  python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+        print("  Then set it BOTH here and in the Vercel project environment.")
+        sys.exit(1)
 
     payload = {
         "url": webhook_url,
         # callback_query is required for inline keyboard buttons to work
         "allowed_updates": ["message", "callback_query"],
+        "secret_token": secret,
     }
-    if secret:
-        payload["secret_token"] = secret
 
     print(f"Setting webhook to: {webhook_url}")
     r = requests.post(

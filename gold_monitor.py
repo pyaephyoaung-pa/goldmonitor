@@ -66,21 +66,23 @@ def notify(msg: str, category: str = "alerts"):
         print(msg)
         return
 
+    # Subscribers and prefs live in the same Gist file — one read for both.
+    subscribers, all_prefs = storage.get_subscribers_and_prefs()
+
     recipients = []
     if TG_CHAT_ID:
         recipients.append(TG_CHAT_ID)
-    for sub_id in storage.get_subscribers():
+    for sub_id in subscribers:
         if sub_id != TG_CHAT_ID:  # avoid duplicate if owner subscribed
             recipients.append(sub_id)
 
-    # One Gist read for everyone's prefs, then filter.
-    all_prefs = storage.get_all_prefs()
     hour = datetime.now(BANGKOK_TZ).hour
-    skipped = [c for c in recipients
-               if not storage.prefs_allow(all_prefs.get(str(c), {}), category, hour)]
-    recipients = [c for c in recipients if c not in skipped]
-    if skipped:
-        print(f"[notify] {len(skipped)} recipient(s) skipped by prefs ({category})")
+    allowed = [c for c in recipients
+               if storage.prefs_allow(all_prefs.get(str(c), {}), category, hour)]
+    if len(allowed) < len(recipients):
+        print(f"[notify] {len(recipients) - len(allowed)} recipient(s) "
+              f"skipped by prefs ({category})")
+    recipients = allowed
 
     for i, chat_id in enumerate(recipients):
         # Telegram broadcast limit is ~30 msg/s — pace sends to stay well under.
@@ -165,15 +167,25 @@ def main():
 
     # ── Day State ───────────────────────────────────────────────
     state = storage.load_day_state()
+    # Set by the evening block; flushed with the day state in one Gist PATCH.
+    pending_model_data = None
 
     # First run of the day — anchor the day's open/high/low.
+    #
+    # With the 24/7 */5 cron this lands at ~00:00 BKK, so "open" means the
+    # day-BOUNDARY price, not the morning price: every drop/rise alert and the
+    # evening "ယနေ့ change" are measured from midnight. That is deliberate —
+    # it leaves no blind window between midnight and the morning message, and
+    # the move across the boundary itself is covered by the gap-down alert
+    # below (vs yesterday's close). Persisted with the rest of the state at the
+    # end of the run; if this run dies first, the next one simply re-anchors a
+    # few minutes later.
     if state["open_price"] is None:
         state.update({
             "open_price": thb_gram,
             "day_low": thb_gram,
             "day_high": thb_gram,
         })
-        storage.save_day_state(state)
 
     # ── Morning Message ─────────────────────────────────────────
     # Send once per day during the morning window (6am–2pm BKK), gated by its
@@ -183,8 +195,8 @@ def main():
     # 00:00 BKK the next day). Those overnight runs used to consume the
     # first-run slot — setting open_price at hour 0, outside the 6–14 window so
     # no message — and the real 7am run then saw open_price already set and
-    # skipped the morning message entirely. Decoupling fixes that; the cron was
-    # also tightened so open_price anchors at the true morning price.
+    # skipped the morning message entirely. Decoupling the two flags is what
+    # fixes that; open_price still anchors at the day boundary (see above).
     if 6 <= hour <= 14 and not state.get("morning_sent"):
         # Include trend if we have history
         trend_lines = ""
@@ -391,7 +403,8 @@ def main():
                 predictor.record_predictions(model_data, pred, thb_gram)
                 changed = True
             if changed:
-                storage.save_model_data(model_data)
+                # Flushed together with the day state at the end of the run.
+                pending_model_data = model_data
             outlook = pred.get("combined_outlook") or pred.get("ta_outlook", "")
             if outlook:
                 predict_line = f"\n🔮 Tomorrow: {outlook}"
@@ -435,7 +448,10 @@ def main():
 
     # Remember the latest price so tomorrow can detect an overnight gap.
     state["last_price"] = thb_gram
-    storage.save_day_state(state)
+    if pending_model_data is not None:
+        storage.save_day_state_and_model(state, pending_model_data)
+    else:
+        storage.save_day_state(state)
 
     # ── Train ML Model (once per day, after enough data) ────────
     if hour == 3 and len(history) >= 100:
@@ -446,7 +462,12 @@ def main():
             print("[ML] Training prediction models...")
             new_model = predictor.train_model(history)
             if new_model:
-                storage.save_model_data(new_model)
+                # MERGE, never replace: train_model returns only the model
+                # payload, so assigning it wholesale would drop the
+                # "predictions" accuracy log that the live hit-rate is built
+                # from — erasing weeks of scored forecasts on every retrain.
+                model_data.update(new_model)
+                storage.save_model_data(model_data)
                 print("[ML] Models saved to Gist")
             else:
                 print("[ML] Training skipped or failed")
