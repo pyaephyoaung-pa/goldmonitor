@@ -38,8 +38,8 @@ def harness(monkeypatch):
     monkeypatch.setattr(storage, "_read_file",
                         lambda f: store.get(f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
     monkeypatch.setattr(storage, "_write_file", lambda f, d: store.__setitem__(f, d))
-    monkeypatch.setattr(storage, "get_subscribers", lambda: [])
-    monkeypatch.setattr(storage, "get_all_prefs", lambda: {})
+    # notify() reads subscribers and prefs together in one Gist round-trip.
+    monkeypatch.setattr(storage, "get_subscribers_and_prefs", lambda: ([], {}))
     monkeypatch.setattr(storage, "prefs_allow", lambda prefs, cat, hour: True)
     monkeypatch.setattr(storage, "pop_triggered_alerts", lambda price: [])
 

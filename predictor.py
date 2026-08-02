@@ -12,6 +12,12 @@ import json
 import pickle
 import base64
 
+import pytz
+
+# Training is scheduled against Bangkok wall-clock time, so `last_trained` must
+# be stamped in the same zone as the date the caller compares it to.
+BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
+
 # ── Technical Indicators ────────────────────────────────────────
 
 def calc_rsi(prices: list, period: int = 14) -> float | None:
@@ -46,22 +52,43 @@ def calc_ema(prices: list, period: int) -> float | None:
     return round(ema, 2)
 
 
+def _ema_series(prices: list, period: int) -> list:
+    """EMA of every prefix of `prices`, from the first full window onward.
+
+    `_ema_series(prices, p)[k]` equals `calc_ema(prices[:p + k], p)` — same
+    rounding, one pass instead of one full re-scan per prefix.
+    """
+    if len(prices) < period:
+        return []
+    multiplier = 2 / (period + 1)
+    ema = sum(prices[:period]) / period
+    out = [round(ema, 2)]
+    for price in prices[period:]:
+        ema = (price - ema) * multiplier + ema
+        out.append(round(ema, 2))
+    return out
+
+
 def calc_macd(prices: list) -> dict | None:
-    """MACD (12, 26, 9)."""
+    """MACD (12, 26, 9).
+
+    The signal line needs the MACD value at every prefix. Recomputing both EMAs
+    from scratch for each of those made this quadratic in len(prices), and it
+    sits inside the per-sample feature extraction — so it dominated training
+    cost. The prefix EMAs now come from a single incremental pass.
+    """
     if len(prices) < 26:
         return None
-    ema12 = calc_ema(prices, 12)
-    ema26 = calc_ema(prices, 26)
-    if ema12 is None or ema26 is None:
+    s12 = _ema_series(prices, 12)
+    s26 = _ema_series(prices, 26)
+    if not s12 or not s26:
         return None
+    ema12, ema26 = s12[-1], s26[-1]
     macd_line = round(ema12 - ema26, 2)
     # Signal line (9-period EMA of MACD) — approximate
-    # Calculate MACD for recent points
     macd_values = []
     for i in range(26, len(prices) + 1):
-        sub = prices[:i]
-        e12 = calc_ema(sub, 12)
-        e26 = calc_ema(sub, 26)
+        e12, e26 = s12[i - 12], s26[i - 26]
         if e12 and e26:
             macd_values.append(e12 - e26)
     signal = calc_ema(macd_values, 9) if len(macd_values) >= 9 else macd_line
@@ -338,11 +365,16 @@ def train_model(history: list) -> dict | None:
             random_state=42,
         )
 
+    # Feature rows do not depend on the horizon — only the LABELS do. Extract
+    # each row once here instead of three times inside the horizon loop.
+    widest = len(history) - min(horizons.values())
+    feature_rows = {i: _extract_features(history, i) for i in range(26, widest)}
+
     for name, horizon in horizons.items():
         # Build samples in chronological order (do NOT shuffle — time series).
         X, y = [], []
         for i in range(26, len(history) - horizon):
-            features = _extract_features(history, i)
+            features = feature_rows.get(i)
             label = _build_labels(history, i, horizon)
             if features is not None and label is not None:
                 X.append(features)
@@ -409,7 +441,11 @@ def train_model(history: list) -> dict | None:
 
     return {
         "models": models,
-        "last_trained": datetime.now().isoformat(),
+        # Bangkok time: the caller's "already trained today?" guard compares
+        # this against a BKK date. A naive UTC stamp (what GitHub Actions
+        # produces) is a calendar day behind at the 3am BKK training hour, so
+        # the guard never matched and every 5-minute tick retrained.
+        "last_trained": datetime.now(BANGKOK_TZ).isoformat(),
         "total_history": len(history),
         "feature_names": [
             "rsi", "price_vs_sma5", "price_vs_sma20", "sma_crossover",

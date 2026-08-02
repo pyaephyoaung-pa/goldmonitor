@@ -64,9 +64,11 @@ def send_message(text: str, chat_id: str = "", reply_markup: dict | None = None)
             wait = min(resp.get("parameters", {}).get("retry_after", 1), 30)
             print(f"[bot] Rate limited — retrying after {wait}s")
             time.sleep(wait)
+            # Resend the ORIGINAL payload — rebuilding it here used to drop
+            # reply_markup, so a rate-limited /help arrived with no buttons.
             r = requests.post(
                 f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-                json={"chat_id": cid, "text": text, "parse_mode": "HTML"},
+                json=payload,
                 timeout=10,
             )
             return r.json()
@@ -241,9 +243,20 @@ def _downsample(items: list, max_points: int) -> list:
     return sampled
 
 
+def chart_points(history: list, days: int) -> list:
+    """The priced points backing both the chart and its caption.
+
+    Single source of truth on purpose: the caption used to slice the raw
+    history and filter afterwards, while the config filtered and then sliced,
+    so any entry missing "thb_gram" made the two disagree about the window —
+    and could leave the caption with an empty list to index.
+    """
+    return [h for h in history if "thb_gram" in h][-days * 24:]
+
+
 def build_chart_config(history: list, days: int) -> dict | None:
     """Build a Chart.js config for the last `days` of price history."""
-    points = [h for h in history if "thb_gram" in h][-days * 24:]
+    points = chart_points(history, days)
     if len(points) < 2:
         return None
     points = _downsample(points, CHART_MAX_POINTS)
@@ -311,7 +324,7 @@ def cmd_chart(chat_id: str, args: str):
         send_message("⚠️ Chart service unavailable — ခဏနေ ပြန်စမ်းပါ", chat_id)
         return
 
-    prices = [h["thb_gram"] for h in history[-days * 24:] if "thb_gram" in h]
+    prices = [p["thb_gram"] for p in chart_points(history, days)]
     change = ((prices[-1] - prices[0]) / prices[0]) * 100 if prices[0] else 0
     arrow = "📈" if change >= 0 else "📉"
     caption = (
@@ -527,7 +540,9 @@ def cmd_history(chat_id: str, args: str):
         days = int(args.strip()) if args.strip() else 7
     except ValueError:
         days = 7
-    days = min(days, 30)
+    # Clamp BOTH ends: `dates[-0:]` is the whole list and `dates[-(-3):]` skips
+    # from the front, so 0 and negatives used to dump far more than requested.
+    days = max(1, min(days, 30))
 
     history = storage.get_price_history()
     if len(history) < 2:
@@ -572,10 +587,12 @@ def cmd_setthreshold(chat_id: str, args: str):
     bot_state = storage.load_bot_state()
     bot_state["drop_threshold"] = val
     storage.save_bot_state(bot_state)
+    # The monitor fires 5 equally spaced levels at 1x–5x this value, so quote
+    # the real ladder rather than a "1.5x strong alert" tier that never fires.
     send_message(
-        f"✅ Alert threshold → <b>{val}%</b>\n"
-        f"🟡 Buy alert: ≥{val}% drop\n"
-        f"🔴 Strong alert: ≥{val * 1.5}% drop",
+        f"✅ Drop alert threshold → <b>{val}%</b>\n"
+        f"🟡 L1: ≥{val:g}% | 🟠 L2: ≥{val * 2:g}% | 🔴 L3: ≥{val * 3:g}%\n"
+        f"🔴🔴 L4: ≥{val * 4:g}% | 🚨 L5: ≥{val * 5:g}%",
         chat_id,
     )
 
@@ -596,8 +613,8 @@ def cmd_setrisethreshold(chat_id: str, args: str):
     storage.save_bot_state(bot_state)
     send_message(
         f"✅ Rise alert threshold → <b>{val}%</b>\n"
-        f"🟢 Rise alert: ≥{val}% rise\n"
-        f"🟣 Strong alert: ≥{val * 1.5}% rise",
+        f"🟢 L1: ≥{val:g}% | 🟢🟢 L2: ≥{val * 2:g}% | 🟣 L3: ≥{val * 3:g}%\n"
+        f"🟣🟣 L4: ≥{val * 4:g}% | 🚀 L5: ≥{val * 5:g}%",
         chat_id,
     )
 

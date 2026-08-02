@@ -6,6 +6,7 @@ lives in bot_core.py (shared with the polling entrypoint); this file only owns
 the HTTP plumbing + webhook-secret verification.
 """
 
+import hmac
 import json
 import os
 import sys
@@ -35,14 +36,24 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        # Optional: verify Telegram secret token
-        if WEBHOOK_SECRET:
-            token = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-            if token != WEBHOOK_SECRET:
-                print("[webhook] Invalid secret token")
-                self.send_response(403)
-                self.end_headers()
-                return
+        # Verify Telegram's secret token — REQUIRED, and fail closed when it is
+        # not configured. The owner check downstream trusts message.chat.id
+        # straight out of this payload, so an unauthenticated endpoint lets
+        # anyone who knows the URL forge the owner's chat id and run
+        # /delete, /sold or /setthreshold against their portfolio.
+        if not WEBHOOK_SECRET:
+            print("[webhook] WEBHOOK_SECRET is not set — refusing update. "
+                  "Set it in the environment and re-run setup_webhook.py.")
+            self.send_response(403)
+            self.end_headers()
+            return
+        if not hmac.compare_digest(
+            self.headers.get("X-Telegram-Bot-Api-Secret-Token", ""), WEBHOOK_SECRET
+        ):
+            print("[webhook] Invalid secret token")
+            self.send_response(403)
+            self.end_headers()
+            return
 
         # Respond 200 to Telegram immediately, then process.
         self.send_response(200)
