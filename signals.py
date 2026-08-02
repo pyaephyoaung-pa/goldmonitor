@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import requests
 
+import i18n
+
 # Stooq primary tickers (kept for reference).
 SYMBOLS = {
     "dxy": "^dxy",    # US Dollar Index
@@ -167,19 +169,19 @@ def fear_score(macro: dict) -> float | None:
     return round(_clamp(level + chg * 0.5), 1)
 
 
-def fear_label(score: float | None) -> str:
+def fear_label(score: float | None, lang: str | None = None) -> str:
     if score is None:
-        return "n/a"
+        return i18n.t("macro.fear.na", lang)
     if score < 25:
-        return "Calm"
+        return i18n.t("macro.fear.calm", lang)
     if score < 50:
-        return "Normal"
+        return i18n.t("macro.fear.normal", lang)
     if score < 75:
-        return "Elevated"
-    return "High fear"
+        return i18n.t("macro.fear.elevated", lang)
+    return i18n.t("macro.fear.high", lang)
 
 
-def gold_bias(macro: dict) -> str | None:
+def gold_bias(macro: dict, lang: str | None = None) -> str | None:
     """Qualitative read of dollar + yield direction as a gold tailwind/headwind."""
     dxy = macro.get("dxy", {}).get("change_pct")
     y = macro.get("us10y", {}).get("change_pct")
@@ -193,10 +195,10 @@ def gold_bias(macro: dict) -> str | None:
     yields_up = y is not None and y > DB_Y
 
     if (dollar_down or yields_down) and not (dollar_up or yields_up):
-        return "tailwind (dollar/yields easing)"
+        return i18n.t("macro.bias.tailwind", lang)
     if (dollar_up or yields_up) and not (dollar_down or yields_down):
-        return "headwind (dollar/yields rising)"
-    return "mixed"
+        return i18n.t("macro.bias.headwind", lang)
+    return i18n.t("macro.bias.mixed", lang)
 
 
 def _arrow(chg):
@@ -221,11 +223,12 @@ def _line_yield(emoji, label, metric):
     return f"  {emoji} {label}: {val}% {_arrow(None)}"
 
 
-def format_macro_block(macro: dict | None = None) -> str:
+def format_macro_block(macro: dict | None = None, lang: str | None = None) -> str:
     """Build the 'Macro & Fear' message block. Fetches if `macro` is None.
 
     Returns "" when no data is available so the caller can append it
-    unconditionally without breaking the message.
+    unconditionally without breaking the message. Pass `macro` explicitly to
+    render the same fetched data in several languages without refetching.
     """
     if macro is None:
         try:
@@ -236,7 +239,7 @@ def format_macro_block(macro: dict | None = None) -> str:
     if not macro:
         return ""
 
-    lines = ["🌍 <b>Macro & Fear</b>"]
+    lines = [i18n.t("macro.title", lang)]
     if "dxy" in macro:
         lines.append(_line("💵", "DXY", macro["dxy"]))
     if "us10y" in macro:
@@ -246,11 +249,12 @@ def format_macro_block(macro: dict | None = None) -> str:
 
     score = fear_score(macro)
     if score is not None:
-        lines.append(f"  🌡 Fear: {score}/100 ({fear_label(score)})")
+        lines.append(i18n.t("macro.fear", lang, score=score,
+                                    label=fear_label(score, lang)))
 
-    bias = gold_bias(macro)
+    bias = gold_bias(macro, lang)
     if bias:
-        lines.append(f"  🧭 Gold bias: {bias}")
+        lines.append(i18n.t("macro.bias", lang, bias=bias))
 
     # Only return a block if we have more than just the header.
     return "\n".join(lines) if len(lines) > 1 else ""

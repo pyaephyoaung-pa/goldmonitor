@@ -47,7 +47,7 @@ def test_owner_command_allowed_for_owner(monkeypatch):
     sent = _capture(monkeypatch)
     called = {}
     monkeypatch.setattr(bot_core, "TG_CHAT_ID", "111")
-    monkeypatch.setattr(bot_core, "cmd_portfolio", lambda cid: called.setdefault("cid", cid))
+    monkeypatch.setattr(bot_core, "cmd_portfolio", lambda cid, lang: called.setdefault("cid", cid))
     handled = bot_core.dispatch_update(_update("/portfolio", chat_id="111"))
     assert handled is True
     assert called.get("cid") == "111"
@@ -56,7 +56,7 @@ def test_owner_command_allowed_for_owner(monkeypatch):
 def test_public_command_routes(monkeypatch):
     _capture(monkeypatch)
     called = {}
-    monkeypatch.setattr(bot_core, "cmd_price", lambda cid: called.setdefault("cid", cid))
+    monkeypatch.setattr(bot_core, "cmd_price", lambda cid, lang: called.setdefault("cid", cid))
     handled = bot_core.dispatch_update(_update("/price", chat_id="222"))
     assert handled is True
     assert called.get("cid") == "222"
@@ -65,7 +65,7 @@ def test_public_command_routes(monkeypatch):
 def test_macro_command_routes(monkeypatch):
     _capture(monkeypatch)
     called = {}
-    monkeypatch.setattr(bot_core, "cmd_macro", lambda cid: called.setdefault("cid", cid))
+    monkeypatch.setattr(bot_core, "cmd_macro", lambda cid, lang: called.setdefault("cid", cid))
     handled = bot_core.dispatch_update(_update("/macro", chat_id="222"))
     assert handled is True
     assert called.get("cid") == "222"

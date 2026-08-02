@@ -96,7 +96,8 @@ def test_format_macro_block_contains_metrics():
         "vix": {"value": 19.87, "change_pct": 5.02, "change_abs": 0.95},
     }
     block = signals.format_macro_block(macro)
-    assert "Macro & Fear" in block
+    # "&" is escaped for Telegram HTML mode; it renders as "&".
+    assert "Macro &amp; Fear" in block
     assert "DXY" in block and "US10Y" in block and "VIX" in block
     assert "4.53%" in block and "pp" in block      # yield as percent + pp move
     assert "Fear:" in block and "Gold bias:" in block
