@@ -1147,10 +1147,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "drop.1.title": {
         "en": "Gold price falling", "my": "ရွှေဈေး ကျဆင်း", "th": "ราคาทองลดลง",
     },
+    # Deliberately names no product: this used to point at a specific
+    # third-party trading app, which the project rename would have turned into
+    # a reference to something that does not exist.
     "drop.1.advice": {
-        "en": "👉 Open PPA Get Gold and buy!",
-        "my": "👉 PPA Get Gold ဖွင့်ဝယ်ပါ!",
-        "th": "👉 เปิด PPA Get Gold แล้วซื้อเลย!",
+        "en": "👉 Open your gold app and buy!",
+        "my": "👉 သင့်ရွှေ app ဖွင့်ဝယ်ပါ!",
+        "th": "👉 เปิดแอปทองของคุณแล้วซื้อเลย!",
     },
     "drop.2.title": {
         "en": "Gold price still falling", "my": "ရွှေဈေး ဆက်ကျဆင်း", "th": "ราคาทองลดลงต่อ",
