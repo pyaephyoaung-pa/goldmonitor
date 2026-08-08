@@ -1,6 +1,6 @@
 <a id="english"></a>
 
-# 🥇 YLG Gold Price Monitor v2 (Telegram)
+# 🥇 PPA Gold Price Monitor v2 (Telegram)
 
 **🇬🇧 English** · [🇲🇲 မြန်မာ](#myanmar)
 
@@ -256,7 +256,7 @@ goldmonitor/
 
 <a id="myanmar"></a>
 
-# 🥇 YLG ရွှေဈေး Monitor v2 (Telegram)
+# 🥇 PPA ရွှေဈေး Monitor v2 (Telegram)
 
 [🇬🇧 English](#english) · **🇲🇲 မြန်မာ**
 

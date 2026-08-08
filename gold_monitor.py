@@ -1,5 +1,5 @@
 """
-YLG ရွှေဈေး Monitor v2 — Enhanced Edition
+PPA ရွှေဈေး Monitor v2 — Enhanced Edition
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Features:
   • Multi-timeframe buy signals (intraday + weekly + monthly)
