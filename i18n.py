@@ -996,9 +996,9 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # ── Monitor broadcasts ──────────────────────────────────────
     "monitor.api_error": {
-        "en": "⚠️ <b>YLG Monitor</b>\nAPI error — could not fetch the price",
-        "my": "⚠️ <b>YLG Monitor</b>\nAPI error — ဈေးနှုန်း ယူမရပါ",
-        "th": "⚠️ <b>YLG Monitor</b>\nAPI error — ดึงราคาไม่สำเร็จ",
+        "en": "⚠️ <b>PPA Monitor</b>\nAPI error — could not fetch the price",
+        "my": "⚠️ <b>PPA Monitor</b>\nAPI error — ဈေးနှုန်း ယူမရပါ",
+        "th": "⚠️ <b>PPA Monitor</b>\nAPI error — ดึงราคาไม่สำเร็จ",
     },
     "monitor.morning": {
         "en": ("🌅 <b>Morning Gold Price</b>\n"
@@ -1298,10 +1298,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "drop.1.title": {
         "en": "Gold price falling", "my": "ရွှေဈေး ကျဆင်း", "th": "ราคาทองลดลง",
     },
+    # Deliberately names no product: this used to point at a specific
+    # third-party trading app, which the project rename would have turned into
+    # a reference to something that does not exist.
     "drop.1.advice": {
-        "en": "👉 Open YLG Get Gold and buy!",
-        "my": "👉 YLG Get Gold ဖွင့်ဝယ်ပါ!",
-        "th": "👉 เปิด YLG Get Gold แล้วซื้อเลย!",
+        "en": "👉 Open your gold app and buy!",
+        "my": "👉 သင့်ရွှေ app ဖွင့်ဝယ်ပါ!",
+        "th": "👉 เปิดแอปทองของคุณแล้วซื้อเลย!",
     },
     "drop.2.title": {
         "en": "Gold price still falling", "my": "ရွှေဈေး ဆက်ကျဆင်း", "th": "ราคาทองลดลงต่อ",
