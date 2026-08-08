@@ -772,6 +772,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — alert me at a price\n"
                "📋 /alerts — your alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
+               "📅 /events — upcoming FOMC / CPI / NFP releases\n"
                "📝 /bought &lt;THB&gt; — log a purchase\n"
                "📝 /sold &lt;THB&gt; — log a sale\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — edit an entry\n"
@@ -795,6 +796,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — ဈေးရောက်ရင် အကြောင်းကြားပါ\n"
                "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
+               "📅 /events — လာမည့် FOMC / CPI / NFP ကြေညာချက်များ\n"
                "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
                "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
@@ -818,6 +820,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — แจ้งเตือนที่ราคาที่กำหนด\n"
                "📋 /alerts — การแจ้งเตือนของคุณ | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + คะแนนความกลัว\n"
+               "📅 /events — FOMC / CPI / NFP ที่กำลังจะประกาศ\n"
                "📝 /bought &lt;THB&gt; — บันทึกการซื้อ\n"
                "📝 /sold &lt;THB&gt; — บันทึกการขาย\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — แก้ไขรายการ\n"
@@ -833,6 +836,82 @@ STRINGS: dict[str, dict[str, str]] = {
                "❓ /help — เมนูนี้\n"
                "━━━━━━━━━━━━━━━\n"
                "⚡ ตอบทันทีผ่าน webhook"),
+    },
+
+    # ── Economic event calendar ─────────────────────────────────
+    "event.type.fomc": {
+        "en": "FOMC rate decision", "my": "FOMC အတိုးနှုန်း ဆုံးဖြတ်ချက်",
+        "th": "การประชุม FOMC (ดอกเบี้ย)",
+    },
+    "event.type.cpi": {
+        "en": "US CPI inflation", "my": "US CPI ငွေကြေးဖောင်းပွမှု",
+        "th": "เงินเฟ้อ CPI สหรัฐ",
+    },
+    "event.type.nfp": {
+        "en": "US Non-Farm Payrolls", "my": "US Non-Farm Payrolls (အလုပ်အကိုင်)",
+        "th": "การจ้างงานนอกภาคเกษตรสหรัฐ",
+    },
+    "event.type.pce": {
+        "en": "US PCE inflation", "my": "US PCE ငွေကြေးဖောင်းပွမှု",
+        "th": "เงินเฟ้อ PCE สหรัฐ",
+    },
+    "event.type.other": {"en": "Scheduled release", "my": "သတ်မှတ်ထားသော ကြေညာချက်",
+                         "th": "การประกาศตามกำหนด"},
+
+    "predict.models_stale": {
+        "en": "ℹ️ Models are being rebuilt for the new event features — ML resumes after the 3am BKK retrain.",
+        "my": "ℹ️ Event features အသစ်အတွက် models ပြန်တည်ဆောက်နေပါသည် — 3am BKK retrain ပြီးမှ ML ပြန်ရပါမည်။",
+        "th": "ℹ️ กำลังสร้างโมเดลใหม่สำหรับฟีเจอร์เหตุการณ์ — ML จะกลับมาหลังเทรนรอบ 03:00 น. (BKK)",
+    },
+    "events.header": {
+        "en": "📅 <b>Upcoming Market Events</b>",
+        "my": "📅 <b>လာမည့် ဈေးကွက် အဖြစ်အပျက်များ</b>",
+        "th": "📅 <b>เหตุการณ์ตลาดที่กำลังจะมาถึง</b>",
+    },
+    "events.line": {
+        "en": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — in {countdown}",
+        "my": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — နောက် {countdown}",
+        "th": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — อีก {countdown}",
+    },
+    "events.estimated": {
+        "en": " <i>(estimated)</i>", "my": " <i>(ခန့်မှန်း)</i>",
+        "th": " <i>(ประมาณการ)</i>",
+    },
+    "events.none": {
+        "en": "📅 No scheduled events on the calendar.",
+        "my": "📅 သတ်မှတ်ထားသော အဖြစ်အပျက် မရှိပါ။",
+        "th": "📅 ไม่มีเหตุการณ์ในปฏิทิน",
+    },
+    "events.footer": {
+        "en": "ℹ️ Gold often moves sharply around these — timing only, not a forecast",
+        "my": "ℹ️ ဤအချိန်များတွင် ရွှေဈေး ပြင်းထန်စွာ လှုပ်ရှားတတ်သည် — အချိန်သာ၊ ခန့်မှန်းချက် မဟုတ်ပါ",
+        "th": "ℹ️ ราคาทองมักผันผวนแรงช่วงนี้ — บอกเวลาเท่านั้น ไม่ใช่การพยากรณ์",
+    },
+    "events.stale": {
+        "en": ("⚠️ <b>Calendar needs updating</b> — only {days}d of events left.\n"
+               "Refresh CALENDAR in events.py from federalreserve.gov / bls.gov."),
+        "my": ("⚠️ <b>Calendar update လိုအပ်သည်</b> — {days} ရက်စာသာ ကျန်တော့သည်။\n"
+               "events.py ထဲရှိ CALENDAR ကို federalreserve.gov / bls.gov မှ ပြန်ဖြည့်ပါ။"),
+        "th": ("⚠️ <b>ต้องอัปเดตปฏิทิน</b> — เหลือเหตุการณ์อีกเพียง {days} วัน\n"
+               "รีเฟรช CALENDAR ใน events.py จาก federalreserve.gov / bls.gov"),
+    },
+    "events.countdown_h": {"en": "{h}h {m}m", "my": "{h}h {m}m", "th": "{h} ชม. {m} น."},
+    "events.countdown_d": {"en": "{d}d {h}h", "my": "{d}d {h}h", "th": "{d} วัน {h} ชม."},
+
+    "events.banner_pre": {
+        "en": "\n⚠️ <b>{name} in {countdown}</b> — expect volatility",
+        "my": "\n⚠️ <b>{name} — နောက် {countdown}</b> — ဈေးလှုပ်ရှားမှု ကြီးနိုင်သည်",
+        "th": "\n⚠️ <b>{name} อีก {countdown}</b> — คาดว่าจะผันผวน",
+    },
+    "events.banner_post": {
+        "en": "\n📰 <b>{name} just released</b> — this move is likely event-driven",
+        "my": "\n📰 <b>{name} ထွက်ပြီ</b> — ဤဈေးလှုပ်ရှားမှုမှာ သတင်းကြောင့် ဖြစ်နိုင်သည်",
+        "th": "\n📰 <b>{name} เพิ่งประกาศ</b> — ราคาที่ขยับน่าจะมาจากข่าวนี้",
+    },
+    "events.ta_caution": {
+        "en": "\n⚠️ TA is unreliable inside an event window — treat the signal with caution",
+        "my": "\n⚠️ Event window အတွင်း TA မမှန်တတ်ပါ — signal ကို သတိဖြင့် သုံးပါ",
+        "th": "\n⚠️ TA ไม่น่าเชื่อถือในช่วงเหตุการณ์ — ใช้สัญญาณอย่างระมัดระวัง",
     },
 
     # ── Inline keyboard button labels ───────────────────────────

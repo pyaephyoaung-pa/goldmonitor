@@ -22,6 +22,7 @@ from datetime import datetime
 import pytz
 import requests
 
+import events
 import i18n
 import storage
 import predictor
@@ -349,6 +350,48 @@ def cmd_macro(chat_id: str, lang: str):
         f"{i18n.t('macro.footer', lang)}",
         chat_id,
     )
+
+
+# ── /events — scheduled high-impact releases ────────────────────
+
+def format_countdown(hours: float, lang: str) -> str:
+    """"3d 4h" / "4h 20m" — coarse on purpose, these are not to-the-second."""
+    total_min = max(0, int(hours * 60))
+    if total_min >= 24 * 60:
+        return i18n.t("events.countdown_d", lang,
+                      d=total_min // (24 * 60), h=(total_min % (24 * 60)) // 60)
+    return i18n.t("events.countdown_h", lang, h=total_min // 60, m=total_min % 60)
+
+
+def format_event_line(event, now, lang: str) -> str:
+    return i18n.t(
+        "events.line", lang,
+        emoji=event.emoji,
+        name=i18n.t(event.label_key, lang),
+        est=i18n.t("events.estimated", lang) if event.estimated else "",
+        when=event.when(BANGKOK_TZ).strftime("%a %d %b, %H:%M"),
+        countdown=format_countdown(event.hours_until(now), lang),
+    )
+
+
+def cmd_events(chat_id: str, lang: str):
+    now = datetime.now(pytz.UTC)
+    upcoming = events.upcoming(now, limit=6)
+    if not upcoming:
+        send_message(i18n.t("events.none", lang), chat_id)
+        return
+
+    lines = [i18n.t("events.header", lang), "━━━━━━━━━━━━━━━"]
+    lines += [format_event_line(e, now, lang) for e in upcoming]
+    lines += ["━━━━━━━━━━━━━━━", i18n.t("events.footer", lang)]
+
+    # Only the owner can act on a stale calendar, so only the owner is told.
+    status = events.calendar_status(now)
+    if status["stale"] and TG_CHAT_ID and chat_id == TG_CHAT_ID:
+        lines.append("")
+        lines.append(i18n.t("events.stale", lang, days=status["days_left"]))
+
+    send_message("\n".join(lines), chat_id)
 
 
 def cmd_bought(chat_id: str, args: str, lang: str):
@@ -787,6 +830,7 @@ PUBLIC_COMMANDS = {
     "/price": lambda cid, _, lang: cmd_price(cid, lang),
     "/predict": lambda cid, _, lang: cmd_predict(cid, lang),
     "/macro": lambda cid, _, lang: cmd_macro(cid, lang),
+    "/events": lambda cid, _, lang: cmd_events(cid, lang),
     "/chart": cmd_chart,
     "/history": cmd_history,
     "/alert": cmd_alert,

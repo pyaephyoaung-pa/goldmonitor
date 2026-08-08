@@ -21,6 +21,7 @@ import traceback
 from datetime import datetime
 import pytz
 
+import events
 import i18n
 import storage
 import predictor
@@ -170,6 +171,36 @@ def main():
 
     print(f"[{time_str}] Gold Monitor v2 checking...")
 
+    # Scheduled high-impact release nearby? Resolved once per run and reused by
+    # every message below. Purely about TIMING — it says something is happening,
+    # never which way the price will go.
+    event, event_phase = events.active_window(now)
+    if event:
+        print(f"  Event window: {event.type} ({event_phase})")
+
+    # Daily messages look further ahead than the alert banner: an alert is about
+    # right now, whereas the morning/evening summary is the moment to say "CPI
+    # lands tomorrow".
+    next_events = events.upcoming(now, within_hours=events.LOOKAHEAD_HOURS, limit=2)
+
+    def day_event_note(lang):
+        if not next_events:
+            return ""
+        lines = [i18n.t("events.header", lang)]
+        lines += [bot_core.format_event_line(e, now, lang) for e in next_events]
+        return "\n━━━━━━━━━━━━━━━\n" + "\n".join(lines)
+
+    def event_banner(lang):
+        """Warning appended to alerts while a release is imminent or fresh."""
+        if not event:
+            return ""
+        name = i18n.t(event.label_key, lang)
+        if event_phase == "pre":
+            return i18n.t("events.banner_pre", lang, name=name,
+                          countdown=bot_core.format_countdown(
+                              event.hours_until(now), lang))
+        return i18n.t("events.banner_post", lang, name=name)
+
     # ── Fetch Price ─────────────────────────────────────────────
     thb_gram, usd_oz, thb_rate = goldapi.get_gold_price()
     if thb_gram is None:
@@ -243,6 +274,7 @@ def main():
             block = signals.format_macro_block(macro_data, lang)
             if block:
                 extras += f"\n━━━━━━━━━━━━━━━\n{block}"
+            extras += day_event_note(lang)
             return i18n.t(
                 "monitor.morning", lang, when=time_str,
                 baht_9999=fmt(gb["baht_9999"]), gram_9999=fmt(gb["gram_9999"]),
@@ -290,12 +322,20 @@ def main():
     ]
 
     def ta_block(lang):
-        """TA suffix shared by the drop / rise / gap alerts."""
+        """TA suffix shared by the drop / rise / gap alerts.
+
+        Inside an event window the indicators are still shown — hiding them
+        loses information — but they carry an explicit caution, because RSI
+        "oversold" 20 minutes before CPI is close to meaningless.
+        """
         out = ""
         if ta.get("overall_signal"):
             out += i18n.t("monitor.ta_signal", lang, signal=ta["overall_signal"])
         if ta.get("rsi"):
             out += "\n" + i18n.t("price.rsi", lang, value=ta["rsi"])
+        out += event_banner(lang)
+        if out and event:
+            out += i18n.t("events.ta_caution", lang)
         return out
 
     for level in DROP_LEVELS:
@@ -422,6 +462,7 @@ def main():
             block = signals.format_macro_block(macro_data, lang)
             if block:
                 extras += f"\n━━━━━━━━━━━━━━━\n{block}"
+            extras += day_event_note(lang)
             return i18n.t(
                 "monitor.evening", lang, when=time_str, price=fmt(thb_gram),
                 open=fmt(state["open_price"]), arrow=arrow, change=change,

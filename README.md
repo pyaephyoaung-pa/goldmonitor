@@ -36,6 +36,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/delalert <#>` | 🗑 Delete a price alert |
 | `/history [N]` | 📈 N-day price history (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/events` | 📅 Upcoming FOMC / CPI / NFP releases |
 | `/subscribe` | 🔔 Receive morning/evening price alerts |
 | `/unsubscribe` | 🔕 Stop alerts |
 | `/settings` | ⚙️ View notification settings |
@@ -218,11 +219,92 @@ an incomplete language cannot ship silently.
 
 ---
 
+## 📅 Event Calendar (why TA alone is not enough)
+
+Technical indicators describe what the price *has done*. They say nothing about
+a Fed decision landing in twenty minutes — and that is where gold's largest
+moves come from. `events.py` adds the timing of scheduled US releases:
+
+| | |
+|---|---|
+| 🏛 FOMC | Rate decision, 14:00 ET |
+| 📈 CPI | US inflation, 08:30 ET |
+| 👷 NFP | Non-Farm Payrolls, 08:30 ET first Friday (generated, marked *estimated*) |
+| 🧾 PCE | US PCE inflation, 08:30 ET |
+
+What it does with them:
+
+- **Before** a release — alerts carry `⚠️ FOMC rate decision in 0h 30m — expect volatility`
+- **After** one — `📰 FOMC rate decision just released — this move is likely event-driven`
+- **Inside either window** — the TA signal is still shown but explicitly flagged
+  as unreliable, because "RSI oversold" 20 minutes before CPI means very little
+- **Daily messages** — the morning and evening summaries list anything due in
+  the next 24h
+- **`/events`** — the next few releases with a countdown, in your language
+
+It also feeds the ML model two new features, `hours_to_event` and
+`in_event_window`. Every other feature is derived from the price series itself,
+which is a large part of why the models honestly report no edge on a
+near-random walk; event timing is the first genuinely **exogenous** input.
+
+> ⚠️ **This calendar is hand-maintained and must be kept current.** Dates are
+> the one part of the feature that cannot be derived or tested into
+> correctness. Top up `CALENDAR` in `events.py` once a year from
+> [federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
+> and [bls.gov](https://www.bls.gov/schedule/news_release/cpi.htm).
+> `/events` warns the owner when fewer than 45 days remain.
+
+**It does not predict direction.** It says *something scheduled is happening* —
+a fact about the calendar, not a forecast about the price.
+
+---
+
+## 📅 Event Calendar (TA တစ်ခုတည်း မလုံလောက်ရခြင်း)
+
+Technical indicators describe what the price *has done*. They say nothing about
+a Fed decision landing in twenty minutes — and that is where gold's largest
+moves come from. `events.py` adds the timing of scheduled US releases:
+
+| | |
+|---|---|
+| 🏛 FOMC | Rate decision, 14:00 ET |
+| 📈 CPI | US inflation, 08:30 ET |
+| 👷 NFP | Non-Farm Payrolls, 08:30 ET first Friday (generated, marked *estimated*) |
+| 🧾 PCE | US PCE inflation, 08:30 ET |
+
+What it does with them:
+
+- **Before** a release — alerts carry `⚠️ FOMC rate decision in 0h 30m — expect volatility`
+- **After** one — `📰 FOMC rate decision just released — this move is likely event-driven`
+- **Inside either window** — the TA signal is still shown but explicitly flagged
+  as unreliable, because "RSI oversold" 20 minutes before CPI means very little
+- **Daily messages** — the morning and evening summaries list anything due in
+  the next 24h
+- **`/events`** — the next few releases with a countdown, in your language
+
+It also feeds the ML model two new features, `hours_to_event` and
+`in_event_window`. Every other feature is derived from the price series itself,
+which is a large part of why the models honestly report no edge on a
+near-random walk; event timing is the first genuinely **exogenous** input.
+
+> ⚠️ **This calendar is hand-maintained and must be kept current.** Dates are
+> the one part of the feature that cannot be derived or tested into
+> correctness. Top up `CALENDAR` in `events.py` once a year from
+> [federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
+> and [bls.gov](https://www.bls.gov/schedule/news_release/cpi.htm).
+> `/events` warns the owner when fewer than 45 days remain.
+
+**It does not predict direction.** It says *something scheduled is happening* —
+a fact about the calendar, not a forecast about the price.
+
+---
+
 ## 📁 Files
 
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
@@ -292,6 +374,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/delalert <#>` | 🗑 Price alert ဖျက်ပါ |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/events` | 📅 လာမည့် FOMC / CPI / NFP ကြေညာချက်များ |
 | `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
 | `/unsubscribe` | 🔕 Alerts ရပ်ပါ |
 | `/settings` | ⚙️ Notification settings ကြည့်ပါ |
@@ -479,6 +562,7 @@ an incomplete language cannot ship silently.
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage

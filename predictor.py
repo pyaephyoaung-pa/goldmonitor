@@ -14,6 +14,7 @@ import base64
 
 import pytz
 
+import events
 import i18n
 
 # Training is scheduled against Bangkok wall-clock time, so `last_trained` must
@@ -287,9 +288,42 @@ def analyze(history: list) -> dict:
 
 # ── ML Prediction Engine ────────────────────────────────────────
 
+# Feature-vector order is fixed; see `feature_names` in train_model(). Adding or
+# reordering a feature invalidates any model already stored in the Gist, so the
+# training metadata records the names alongside the pickles.
+
+EVENT_HOURS_CAP = 168.0  # a week out is "far away" as far as the model cares
+
+
+def _entry_time(entry: dict):
+    """The point's own timestamp, or None if it is unusable."""
+    try:
+        return datetime.fromisoformat(entry["ts"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _hours_to_event(entry: dict) -> float:
+    t = _entry_time(entry)
+    if t is None:
+        return EVENT_HOURS_CAP
+    return events.hours_to_next(t, cap=EVENT_HOURS_CAP)
+
+
+def _in_event_window(entry: dict) -> bool:
+    t = _entry_time(entry)
+    return False if t is None else events.in_event_window(t)
+
+
 def _extract_features(history: list, idx: int) -> list | None:
     """Extract feature vector for a single data point.
     Requires at least 26 prior points for MACD.
+
+    Every other feature here is derived from the price series itself, which is
+    why the models honestly report no edge on what is close to a random walk.
+    The two event-timing features are the only EXOGENOUS information in the
+    vector — they are computed from the point's own timestamp, so a historical
+    row sees exactly what was knowable at that moment.
     """
     if idx < 26:
         return None
@@ -322,6 +356,8 @@ def _extract_features(history: list, idx: int) -> list | None:
         vol,
         entry.get("hour", 12),
         entry.get("weekday", 0),
+        _hours_to_event(entry),
+        1.0 if _in_event_window(entry) else 0.0,
         # Price change features
         (prices[-1] - prices[-2]) / prices[-2] * 100 if len(prices) >= 2 else 0,
         (prices[-1] - prices[-4]) / prices[-4] * 100 if len(prices) >= 4 else 0,
@@ -429,6 +465,10 @@ def train_model(history: list) -> dict | None:
         model_bytes = pickle.dumps(model)
         models[name] = {
             "model_b64": base64.b64encode(model_bytes).decode("utf-8"),
+            # Stamped so predict() can refuse a model trained on a different
+            # feature vector — adding a feature silently invalidates old
+            # pickles, and sklearn's own error is opaque.
+            "n_features": X_arr.shape[1],
             "accuracy": oos_acc,          # back-compat: now the honest OOS number
             "oos_accuracy": oos_acc,
             "baseline_accuracy": baseline_acc,
@@ -452,7 +492,9 @@ def train_model(history: list) -> dict | None:
         "feature_names": [
             "rsi", "price_vs_sma5", "price_vs_sma20", "sma_crossover",
             "macd", "macd_histogram", "bb_position", "momentum",
-            "volatility", "hour", "weekday", "change_1h", "change_4h",
+            "volatility", "hour", "weekday",
+            "hours_to_event", "in_event_window",
+            "change_1h", "change_4h",
         ],
     }
 
@@ -509,6 +551,14 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
 
         for horizon_name, minfo in models_dict.items():
             try:
+                trained_n = minfo.get("n_features")
+                if trained_n is not None and trained_n != X_pred.shape[1]:
+                    result["predictions"][horizon_name] = {
+                        "stale": True,
+                        "error": (f"trained on {trained_n} features, now "
+                                  f"{X_pred.shape[1]} — retrains at 3am BKK"),
+                    }
+                    continue
                 model = pickle.loads(base64.b64decode(minfo["model_b64"]))
                 proba = model.predict_proba(X_pred)[0]
                 pred_class = model.predict(X_pred)[0]
@@ -824,6 +874,10 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
                 )
             elif "error" in pred:
                 lines.append(f"  ⚠️ {horizon}: {pred['error']}")
+
+        if any(p.get("stale") for p in prediction["predictions"].values()
+               if isinstance(p, dict)):
+            lines.append(i18n.t("predict.models_stale", lang))
 
         if prediction.get("ml_has_edge") is False:
             lines.append(i18n.t("predict.no_edge_note", lang))
