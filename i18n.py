@@ -838,6 +838,53 @@ STRINGS: dict[str, dict[str, str]] = {
                "⚡ ตอบทันทีผ่าน webhook"),
     },
 
+    # ── Market regime (volatility + driver divergence) ──────────
+    "regime.vol_elevated": {
+        "en": "⚡ Volatility {ratio}× normal — larger moves than usual",
+        "my": "⚡ ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — ပုံမှန်ထက် ကြီးမားသည်",
+        "th": "⚡ ความผันผวน {ratio} เท่าของปกติ — ราคาขยับแรงกว่าปกติ",
+    },
+    "regime.vol_extreme": {
+        "en": "🌪 Volatility {ratio}× normal — something is moving this market",
+        "my": "🌪 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — တစ်ခုခု ဖြစ်နေသည်",
+        "th": "🌪 ความผันผวน {ratio} เท่าของปกติ — มีบางอย่างกำลังขับเคลื่อนตลาด",
+    },
+    "regime.shock": {
+        "en": "❗ Last move {move:+.2f}% — {sigma}σ vs its own baseline, worth checking the news",
+        "my": "❗ နောက်ဆုံး ပြောင်းလဲမှု {move:+.2f}% — baseline ထက် {sigma}σ၊ သတင်း စစ်သင့်သည်",
+        "th": "❗ การเปลี่ยนแปลงล่าสุด {move:+.2f}% — {sigma}σ เทียบค่าปกติ ควรเช็กข่าว",
+    },
+    "regime.div.safe_haven": {
+        "en": "🛡 Gold rising against BOTH a stronger dollar and higher yields — safe-haven bid, not a rates move",
+        "my": "🛡 ဒေါ်လာနှင့် yields နှစ်ခုလုံး တက်နေချိန် ရွှေတက် — safe-haven ဝယ်လိုအား၊ အတိုးနှုန်း အကြောင်း မဟုတ်",
+        "th": "🛡 ทองขึ้นสวนทางทั้งดอลลาร์แข็งและผลตอบแทนสูงขึ้น — แรงซื้อสินทรัพย์ปลอดภัย ไม่ใช่เรื่องดอกเบี้ย",
+    },
+    "regime.div.liquidation": {
+        "en": "🩸 Gold falling despite a weaker dollar and lower yields — looks like forced selling",
+        "my": "🩸 ဒေါ်လာနှင့် yields ကျနေသော်လည်း ရွှေကျနေ — အတင်းရောင်းချမှု ဖြစ်နိုင်",
+        "th": "🩸 ทองลงทั้งที่ดอลลาร์อ่อนและผลตอบแทนลดลง — น่าจะเป็นการเทขาย",
+    },
+    "regime.header": {
+        "en": "🔍 <b>Market Regime</b>",
+        "my": "🔍 <b>ဈေးကွက် အခြေအနေ</b>",
+        "th": "🔍 <b>สภาวะตลาด</b>",
+    },
+    "regime.calm": {
+        "en": "😴 Volatility {ratio}× normal — quiet market",
+        "my": "😴 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — ငြိမ်သက်နေသည်",
+        "th": "😴 ความผันผวน {ratio} เท่าของปกติ — ตลาดเงียบ",
+    },
+    "regime.normal": {
+        "en": "🟢 Volatility {ratio}× normal",
+        "my": "🟢 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ",
+        "th": "🟢 ความผันผวน {ratio} เท่าของปกติ",
+    },
+    "regime.unavailable": {
+        "en": "📊 Collecting data — {have}/{need} points needed for a volatility baseline",
+        "my": "📊 Data စုဆောင်းနေသည် — volatility baseline အတွက် {have}/{need} လိုအပ်သည်",
+        "th": "📊 กำลังเก็บข้อมูล — ต้องการ {have}/{need} จุดเพื่อคำนวณค่าฐาน",
+    },
+
     # ── Economic event calendar ─────────────────────────────────
     "event.type.fomc": {
         "en": "FOMC rate decision", "my": "FOMC အတိုးနှုန်း ဆုံးဖြတ်ချက်",

@@ -299,12 +299,103 @@ a fact about the calendar, not a forecast about the price.
 
 ---
 
+## 🔍 Market Regime (detecting a move without knowing the cause)
+
+The event calendar covers moves you can see coming. This covers the rest: it
+detects that *something happened* without needing to know what. Two independent
+checks, both from data the bot already has — no news feed, no API, no key.
+
+**1. Volatility regime.** Compares realized volatility over the last 6h against
+its own 7-day baseline. A jump is the fingerprint of news landing, whatever the
+news was.
+
+```
+⚡ Volatility 2.6× normal — larger moves than usual
+🌪 Volatility 7.5× normal — something is moving this market
+❗ Last move -1.00% — 7.9σ vs its own baseline, worth checking the news
+```
+
+The baseline deliberately **excludes** the recent window. Including it would let
+a spike inflate the very baseline it is measured against — which is how naive
+versions of this end up never firing.
+
+**2. Driver divergence.** Gold usually falls when the dollar and yields rise.
+When it climbs against **both** at once, the move is not a rates story:
+
+```
+🛡 Gold rising against BOTH a stronger dollar and higher yields
+   — safe-haven bid, not a rates move
+🩸 Gold falling despite a weaker dollar and lower yields
+   — looks like forced selling
+```
+
+DXY and US10Y are already fetched for `/macro`, so this costs nothing extra.
+Yield moves are compared in **percentage points** (3bp deadband), not percent —
+for a 10Y near 4.5%, a "0.10% change" is ~0.005pp, i.e. nothing.
+
+The two are complementary: a steady one-directional drift has *low* volatility
+(all moves the same sign) but still trips the single-bar shock check and the
+divergence check.
+
+Shown in alerts and the evening summary only when something is actually
+unusual — a quiet market adds no lines. `/macro` always shows the current
+regime. Neither check predicts direction; one says "this move is unusually
+large", the other "this move is not explained by the usual drivers".
+
+---
+
+## 🔍 Market Regime (အကြောင်းရင်း မသိဘဲ ဈေးလှုပ်ရှားမှု ရှာဖွေခြင်း)
+
+The event calendar covers moves you can see coming. This covers the rest: it
+detects that *something happened* without needing to know what. Two independent
+checks, both from data the bot already has — no news feed, no API, no key.
+
+**1. Volatility regime.** Compares realized volatility over the last 6h against
+its own 7-day baseline. A jump is the fingerprint of news landing, whatever the
+news was.
+
+```
+⚡ Volatility 2.6× normal — larger moves than usual
+🌪 Volatility 7.5× normal — something is moving this market
+❗ Last move -1.00% — 7.9σ vs its own baseline, worth checking the news
+```
+
+The baseline deliberately **excludes** the recent window. Including it would let
+a spike inflate the very baseline it is measured against — which is how naive
+versions of this end up never firing.
+
+**2. Driver divergence.** Gold usually falls when the dollar and yields rise.
+When it climbs against **both** at once, the move is not a rates story:
+
+```
+🛡 Gold rising against BOTH a stronger dollar and higher yields
+   — safe-haven bid, not a rates move
+🩸 Gold falling despite a weaker dollar and lower yields
+   — looks like forced selling
+```
+
+DXY and US10Y are already fetched for `/macro`, so this costs nothing extra.
+Yield moves are compared in **percentage points** (3bp deadband), not percent —
+for a 10Y near 4.5%, a "0.10% change" is ~0.005pp, i.e. nothing.
+
+The two are complementary: a steady one-directional drift has *low* volatility
+(all moves the same sign) but still trips the single-bar shock check and the
+divergence check.
+
+Shown in alerts and the evening summary only when something is actually
+unusual — a quiet market adds no lines. `/macro` always shows the current
+regime. Neither check predicts direction; one says "this move is unusually
+large", the other "this move is not explained by the usual drivers".
+
+---
+
 ## 📁 Files
 
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
 ├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
+├── regime.py                # Volatility regime + gold/driver divergence
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
@@ -563,6 +654,7 @@ an incomplete language cannot ship silently.
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
 ├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
+├── regime.py                # Volatility regime + gold/driver divergence
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage

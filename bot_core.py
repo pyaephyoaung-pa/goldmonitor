@@ -26,6 +26,7 @@ import events
 import i18n
 import storage
 import predictor
+import regime
 import goldapi
 import signals
 from gold_format import fmt, gold_breakdown
@@ -339,17 +340,55 @@ def cmd_chart(chat_id: str, args: str, lang: str):
 
 
 def cmd_macro(chat_id: str, lang: str):
-    """Show the macro & fear context (DXY / US10Y / VIX) on demand."""
-    block = signals.format_macro_block(lang=lang)
-    if not block:
+    """Macro context (DXY / US10Y / VIX) plus the current market regime.
+
+    The regime half needs no network at all — it is computed from the price
+    history we already store — so it is still shown when the macro fetch fails.
+    """
+    macro = signals.fetch_macro()
+    block = signals.format_macro_block(macro, lang) if macro else ""
+
+    history = storage.get_price_history()
+    vol = regime.vol_regime(history)
+    div_key = regime.divergence(
+        predictor.get_trend_summary(history).get("change_24h") if len(history) >= 2 else None,
+        macro,
+    )
+
+    lines = []
+    if block:
+        lines += [block, "━━━━━━━━━━━━━━━"]
+
+    lines.append(i18n.t("regime.header", lang))
+    if not vol.get("available"):
+        lines.append(i18n.t("regime.unavailable", lang,
+                            have=vol.get("have", 0), need=vol.get("need", 0)))
+    elif vol["level"] == "extreme":
+        lines.append(i18n.t("regime.vol_extreme", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    elif vol["level"] == "elevated":
+        lines.append(i18n.t("regime.vol_elevated", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    elif vol["level"] == "calm":
+        lines.append(i18n.t("regime.calm", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    else:
+        lines.append(i18n.t("regime.normal", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+
+    if vol.get("shock"):
+        lines.append(i18n.t("regime.shock", lang,
+                            sigma=regime.display_sigma(vol["sigma"]),
+                            move=vol["last_move"]))
+    if div_key:
+        lines.append(i18n.t(div_key, lang))
+
+    if not block and not vol.get("available"):
         send_message(i18n.t("macro.unavailable", lang), chat_id)
         return
-    send_message(
-        f"{block}\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"{i18n.t('macro.footer', lang)}",
-        chat_id,
-    )
+
+    lines += ["━━━━━━━━━━━━━━━", i18n.t("macro.footer", lang)]
+    send_message("\n".join(lines), chat_id)
 
 
 # ── /events — scheduled high-impact releases ────────────────────

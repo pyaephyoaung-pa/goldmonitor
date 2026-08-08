@@ -25,6 +25,7 @@ import events
 import i18n
 import storage
 import predictor
+import regime
 import goldapi
 import bot_core
 import signals
@@ -311,6 +312,25 @@ def main():
     ta = predictor.analyze(history) if len(history) >= 14 else {}
     trend = predictor.get_trend_summary(history) if len(history) >= 2 else {}
 
+    # Regime: is this move unusually large, and is it moving against gold's
+    # usual drivers? Both describe what already happened — neither forecasts.
+    # Macro is fetched lazily: only worth a round-trip once volatility says
+    # something is actually going on.
+    vol = regime.vol_regime(history)
+    divergence_key = None
+    if regime.is_unusual(vol):
+        try:
+            divergence_key = regime.divergence(trend.get("change_24h"),
+                                               signals.fetch_macro())
+        except Exception as e:  # macro is optional context, never fatal
+            print(f"[regime] macro fetch failed: {e}")
+    if vol.get("available"):
+        print(f"  Regime: {vol['level']} (vol {vol['ratio']}x, "
+              f"last move {vol['sigma']}σ)")
+
+    def regime_block(lang):
+        return regime.format_block(vol, divergence_key, lang)
+
     # ── Drop Alerts (5 levels, equal spacing) ─────────────────────
     # Titles and advice are i18n keys, resolved per recipient language.
     DROP_LEVELS = [
@@ -336,6 +356,7 @@ def main():
         out += event_banner(lang)
         if out and event:
             out += i18n.t("events.ta_caution", lang)
+        out += regime_block(lang)
         return out
 
     for level in DROP_LEVELS:
@@ -463,6 +484,7 @@ def main():
             if block:
                 extras += f"\n━━━━━━━━━━━━━━━\n{block}"
             extras += day_event_note(lang)
+            extras += regime_block(lang)
             return i18n.t(
                 "monitor.evening", lang, when=time_str, price=fmt(thb_gram),
                 open=fmt(state["open_price"]), arrow=arrow, change=change,
