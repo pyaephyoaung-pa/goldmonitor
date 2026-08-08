@@ -36,6 +36,8 @@ GitHub Actions + Python — **$0 to run**.
 | `/delalert <#>` | 🗑 Delete a price alert |
 | `/history [N]` | 📈 N-day price history (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/events` | 📅 Upcoming FOMC / CPI / NFP releases |
+| `/news` | 📰 Recent gold headlines (context only) |
 | `/subscribe` | 🔔 Receive morning/evening price alerts |
 | `/unsubscribe` | 🔕 Stop alerts |
 | `/settings` | ⚙️ View notification settings |
@@ -218,11 +220,246 @@ an incomplete language cannot ship silently.
 
 ---
 
+## 📅 Event Calendar (why TA alone is not enough)
+
+Technical indicators describe what the price *has done*. They say nothing about
+a Fed decision landing in twenty minutes — and that is where gold's largest
+moves come from. `events.py` adds the timing of scheduled US releases:
+
+| | |
+|---|---|
+| 🏛 FOMC | Rate decision, 14:00 ET |
+| 📈 CPI | US inflation, 08:30 ET |
+| 👷 NFP | Non-Farm Payrolls, 08:30 ET first Friday (generated, marked *estimated*) |
+| 🧾 PCE | US PCE inflation, 08:30 ET |
+
+What it does with them:
+
+- **Before** a release — alerts carry `⚠️ FOMC rate decision in 0h 30m — expect volatility`
+- **After** one — `📰 FOMC rate decision just released — this move is likely event-driven`
+- **Inside either window** — the TA signal is still shown but explicitly flagged
+  as unreliable, because "RSI oversold" 20 minutes before CPI means very little
+- **Daily messages** — the morning and evening summaries list anything due in
+  the next 24h
+- **`/events`** — the next few releases with a countdown, in your language
+
+It also feeds the ML model two new features, `hours_to_event` and
+`in_event_window`. Every other feature is derived from the price series itself,
+which is a large part of why the models honestly report no edge on a
+near-random walk; event timing is the first genuinely **exogenous** input.
+
+> ⚠️ **This calendar is hand-maintained and must be kept current.** Dates are
+> the one part of the feature that cannot be derived or tested into
+> correctness. Top up `CALENDAR` in `events.py` once a year from
+> [federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
+> and [bls.gov](https://www.bls.gov/schedule/news_release/cpi.htm).
+> `/events` warns the owner when fewer than 45 days remain.
+
+**It does not predict direction.** It says *something scheduled is happening* —
+a fact about the calendar, not a forecast about the price.
+
+---
+
+## 📅 Event Calendar (TA တစ်ခုတည်း မလုံလောက်ရခြင်း)
+
+Technical indicators describe what the price *has done*. They say nothing about
+a Fed decision landing in twenty minutes — and that is where gold's largest
+moves come from. `events.py` adds the timing of scheduled US releases:
+
+| | |
+|---|---|
+| 🏛 FOMC | Rate decision, 14:00 ET |
+| 📈 CPI | US inflation, 08:30 ET |
+| 👷 NFP | Non-Farm Payrolls, 08:30 ET first Friday (generated, marked *estimated*) |
+| 🧾 PCE | US PCE inflation, 08:30 ET |
+
+What it does with them:
+
+- **Before** a release — alerts carry `⚠️ FOMC rate decision in 0h 30m — expect volatility`
+- **After** one — `📰 FOMC rate decision just released — this move is likely event-driven`
+- **Inside either window** — the TA signal is still shown but explicitly flagged
+  as unreliable, because "RSI oversold" 20 minutes before CPI means very little
+- **Daily messages** — the morning and evening summaries list anything due in
+  the next 24h
+- **`/events`** — the next few releases with a countdown, in your language
+
+It also feeds the ML model two new features, `hours_to_event` and
+`in_event_window`. Every other feature is derived from the price series itself,
+which is a large part of why the models honestly report no edge on a
+near-random walk; event timing is the first genuinely **exogenous** input.
+
+> ⚠️ **This calendar is hand-maintained and must be kept current.** Dates are
+> the one part of the feature that cannot be derived or tested into
+> correctness. Top up `CALENDAR` in `events.py` once a year from
+> [federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
+> and [bls.gov](https://www.bls.gov/schedule/news_release/cpi.htm).
+> `/events` warns the owner when fewer than 45 days remain.
+
+**It does not predict direction.** It says *something scheduled is happening* —
+a fact about the calendar, not a forecast about the price.
+
+---
+
+## 🔍 Market Regime (detecting a move without knowing the cause)
+
+The event calendar covers moves you can see coming. This covers the rest: it
+detects that *something happened* without needing to know what. Two independent
+checks, both from data the bot already has — no news feed, no API, no key.
+
+**1. Volatility regime.** Compares realized volatility over the last 6h against
+its own 7-day baseline. A jump is the fingerprint of news landing, whatever the
+news was.
+
+```
+⚡ Volatility 2.6× normal — larger moves than usual
+🌪 Volatility 7.5× normal — something is moving this market
+❗ Last move -1.00% — 7.9σ vs its own baseline, worth checking the news
+```
+
+The baseline deliberately **excludes** the recent window. Including it would let
+a spike inflate the very baseline it is measured against — which is how naive
+versions of this end up never firing.
+
+**2. Driver divergence.** Gold usually falls when the dollar and yields rise.
+When it climbs against **both** at once, the move is not a rates story:
+
+```
+🛡 Gold rising against BOTH a stronger dollar and higher yields
+   — safe-haven bid, not a rates move
+🩸 Gold falling despite a weaker dollar and lower yields
+   — looks like forced selling
+```
+
+DXY and US10Y are already fetched for `/macro`, so this costs nothing extra.
+Yield moves are compared in **percentage points** (3bp deadband), not percent —
+for a 10Y near 4.5%, a "0.10% change" is ~0.005pp, i.e. nothing.
+
+The two are complementary: a steady one-directional drift has *low* volatility
+(all moves the same sign) but still trips the single-bar shock check and the
+divergence check.
+
+Shown in alerts and the evening summary only when something is actually
+unusual — a quiet market adds no lines. `/macro` always shows the current
+regime. Neither check predicts direction; one says "this move is unusually
+large", the other "this move is not explained by the usual drivers".
+
+---
+
+## 🔍 Market Regime (အကြောင်းရင်း မသိဘဲ ဈေးလှုပ်ရှားမှု ရှာဖွေခြင်း)
+
+The event calendar covers moves you can see coming. This covers the rest: it
+detects that *something happened* without needing to know what. Two independent
+checks, both from data the bot already has — no news feed, no API, no key.
+
+**1. Volatility regime.** Compares realized volatility over the last 6h against
+its own 7-day baseline. A jump is the fingerprint of news landing, whatever the
+news was.
+
+```
+⚡ Volatility 2.6× normal — larger moves than usual
+🌪 Volatility 7.5× normal — something is moving this market
+❗ Last move -1.00% — 7.9σ vs its own baseline, worth checking the news
+```
+
+The baseline deliberately **excludes** the recent window. Including it would let
+a spike inflate the very baseline it is measured against — which is how naive
+versions of this end up never firing.
+
+**2. Driver divergence.** Gold usually falls when the dollar and yields rise.
+When it climbs against **both** at once, the move is not a rates story:
+
+```
+🛡 Gold rising against BOTH a stronger dollar and higher yields
+   — safe-haven bid, not a rates move
+🩸 Gold falling despite a weaker dollar and lower yields
+   — looks like forced selling
+```
+
+DXY and US10Y are already fetched for `/macro`, so this costs nothing extra.
+Yield moves are compared in **percentage points** (3bp deadband), not percent —
+for a 10Y near 4.5%, a "0.10% change" is ~0.005pp, i.e. nothing.
+
+The two are complementary: a steady one-directional drift has *low* volatility
+(all moves the same sign) but still trips the single-bar shock check and the
+divergence check.
+
+Shown in alerts and the evening summary only when something is actually
+unusual — a quiet market adds no lines. `/macro` always shows the current
+regime. Neither check predicts direction; one says "this move is unusually
+large", the other "this move is not explained by the usual drivers".
+
+---
+
+## 📰 Headlines (context only)
+
+The final piece answers the question the other two provoke: *"something just
+happened — what was it?"*
+
+`/news` shows recent gold-related headlines from
+[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+**only when the regime detector or the event calendar already flagged
+something**, so headlines always arrive as an explanation for a move the bot
+detected by other means — never as a standalone prompt to act. That also keeps
+the fetch off the hot path for the ~288 quiet runs a day.
+
+**What this deliberately does NOT do:**
+
+- ❌ No sentiment scoring
+- ❌ No direction inferred from a headline
+- ❌ Never feeds a buy/sell signal, an alert threshold, or an ML feature
+
+Headline sentiment maps poorly onto gold's actual reaction — the same
+"conflict escalates" story can precede a rally or a fade depending on
+positioning, and the sign is not stable enough to trade on. Presenting it as a
+signal would contradict the honest-metrics posture the rest of this project
+holds to. Two tests exist purely to keep that boundary from eroding: one
+asserts no headline ever reaches the model, another fails if `news.py` ever
+grows a `sentiment` / `bullish` / `signal` function.
+
+Headlines are third-party text, so titles, URLs and domains are all
+HTML-escaped before they reach Telegram.
+
+---
+
+## 📰 သတင်းခေါင်းစဉ်များ (အခြေအနေ သိရှိရန်သာ)
+
+The final piece answers the question the other two provoke: *"something just
+happened — what was it?"*
+
+`/news` shows recent gold-related headlines from
+[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+**only when the regime detector or the event calendar already flagged
+something**, so headlines always arrive as an explanation for a move the bot
+detected by other means — never as a standalone prompt to act. That also keeps
+the fetch off the hot path for the ~288 quiet runs a day.
+
+**What this deliberately does NOT do:**
+
+- ❌ No sentiment scoring
+- ❌ No direction inferred from a headline
+- ❌ Never feeds a buy/sell signal, an alert threshold, or an ML feature
+
+Headline sentiment maps poorly onto gold's actual reaction — the same
+"conflict escalates" story can precede a rally or a fade depending on
+positioning, and the sign is not stable enough to trade on. Presenting it as a
+signal would contradict the honest-metrics posture the rest of this project
+holds to. Two tests exist purely to keep that boundary from eroding: one
+asserts no headline ever reaches the model, another fails if `news.py` ever
+grows a `sentiment` / `bullish` / `signal` function.
+
+Headlines are third-party text, so titles, URLs and domains are all
+HTML-escaped before they reach Telegram.
+
+---
+
 ## 📁 Files
 
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
+├── regime.py                # Volatility regime + gold/driver divergence
+├── news.py                  # GDELT headlines — display only, no sentiment
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
@@ -292,6 +529,8 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/delalert <#>` | 🗑 Price alert ဖျက်ပါ |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/events` | 📅 လာမည့် FOMC / CPI / NFP ကြေညာချက်များ |
+| `/news` | 📰 ရွှေဆိုင်ရာ သတင်းများ (အခြေအနေသိရန်သာ) |
 | `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
 | `/unsubscribe` | 🔕 Alerts ရပ်ပါ |
 | `/settings` | ⚙️ Notification settings ကြည့်ပါ |
@@ -479,6 +718,9 @@ an incomplete language cannot ship silently.
 ```
 goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
+├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
+├── regime.py                # Volatility regime + gold/driver divergence
+├── news.py                  # GDELT headlines — display only, no sentiment
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage

@@ -772,6 +772,8 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — alert me at a price\n"
                "📋 /alerts — your alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
+               "📅 /events — upcoming FOMC / CPI / NFP releases\n"
+               "📰 /news — recent gold headlines (context only)\n"
                "📝 /bought &lt;THB&gt; — log a purchase\n"
                "📝 /sold &lt;THB&gt; — log a sale\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — edit an entry\n"
@@ -795,6 +797,8 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — ဈေးရောက်ရင် အကြောင်းကြားပါ\n"
                "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
+               "📅 /events — လာမည့် FOMC / CPI / NFP ကြေညာချက်များ\n"
+               "📰 /news — ရွှေဆိုင်ရာ သတင်းများ (အခြေအနေသိရန်သာ)\n"
                "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
                "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
@@ -818,6 +822,8 @@ STRINGS: dict[str, dict[str, str]] = {
                "🎯 /alert above|below &lt;THB&gt; — แจ้งเตือนที่ราคาที่กำหนด\n"
                "📋 /alerts — การแจ้งเตือนของคุณ | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + คะแนนความกลัว\n"
+               "📅 /events — FOMC / CPI / NFP ที่กำลังจะประกาศ\n"
+               "📰 /news — ข่าวทองล่าสุด (เป็นบริบทเท่านั้น)\n"
                "📝 /bought &lt;THB&gt; — บันทึกการซื้อ\n"
                "📝 /sold &lt;THB&gt; — บันทึกการขาย\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — แก้ไขรายการ\n"
@@ -833,6 +839,151 @@ STRINGS: dict[str, dict[str, str]] = {
                "❓ /help — เมนูนี้\n"
                "━━━━━━━━━━━━━━━\n"
                "⚡ ตอบทันทีผ่าน webhook"),
+    },
+
+    # ── News headlines (context only — never a signal) ──────────
+    "news.header": {
+        "en": "📰 <b>Recent headlines</b>",
+        "my": "📰 <b>လတ်တလော သတင်းခေါင်းစဉ်များ</b>",
+        "th": "📰 <b>พาดหัวข่าวล่าสุด</b>",
+    },
+    "news.footer": {
+        "en": "ℹ️ Headlines for context — the bot does not interpret them or trade on them",
+        "my": "ℹ️ အခြေအနေ သိရှိရန်သာ — bot က ဤသတင်းများကို အဓိပ္ပာယ်ဖွင့်ခြင်း မရှိပါ",
+        "th": "ℹ️ พาดหัวข่าวเพื่อเป็นบริบท — บอทไม่ตีความและไม่ใช้ตัดสินใจซื้อขาย",
+    },
+    "news.none": {
+        "en": "📰 No recent gold-related headlines found.",
+        "my": "📰 ရွှေနှင့် သက်ဆိုင်သော သတင်း မတွေ့ပါ။",
+        "th": "📰 ไม่พบพาดหัวข่าวเกี่ยวกับทองล่าสุด",
+    },
+    "news.unavailable": {
+        "en": "⚠️ News source unavailable — please try again shortly",
+        "my": "⚠️ သတင်း ရင်းမြစ် ယူမရပါ — ခဏနေ ပြန်စမ်းပါ",
+        "th": "⚠️ แหล่งข่าวใช้งานไม่ได้ — ลองใหม่อีกสักครู่",
+    },
+
+    # ── Market regime (volatility + driver divergence) ──────────
+    "regime.vol_elevated": {
+        "en": "⚡ Volatility {ratio}× normal — larger moves than usual",
+        "my": "⚡ ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — ပုံမှန်ထက် ကြီးမားသည်",
+        "th": "⚡ ความผันผวน {ratio} เท่าของปกติ — ราคาขยับแรงกว่าปกติ",
+    },
+    "regime.vol_extreme": {
+        "en": "🌪 Volatility {ratio}× normal — something is moving this market",
+        "my": "🌪 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — တစ်ခုခု ဖြစ်နေသည်",
+        "th": "🌪 ความผันผวน {ratio} เท่าของปกติ — มีบางอย่างกำลังขับเคลื่อนตลาด",
+    },
+    "regime.shock": {
+        "en": "❗ Last move {move:+.2f}% — {sigma}σ vs its own baseline, worth checking the news",
+        "my": "❗ နောက်ဆုံး ပြောင်းလဲမှု {move:+.2f}% — baseline ထက် {sigma}σ၊ သတင်း စစ်သင့်သည်",
+        "th": "❗ การเปลี่ยนแปลงล่าสุด {move:+.2f}% — {sigma}σ เทียบค่าปกติ ควรเช็กข่าว",
+    },
+    "regime.div.safe_haven": {
+        "en": "🛡 Gold rising against BOTH a stronger dollar and higher yields — safe-haven bid, not a rates move",
+        "my": "🛡 ဒေါ်လာနှင့် yields နှစ်ခုလုံး တက်နေချိန် ရွှေတက် — safe-haven ဝယ်လိုအား၊ အတိုးနှုန်း အကြောင်း မဟုတ်",
+        "th": "🛡 ทองขึ้นสวนทางทั้งดอลลาร์แข็งและผลตอบแทนสูงขึ้น — แรงซื้อสินทรัพย์ปลอดภัย ไม่ใช่เรื่องดอกเบี้ย",
+    },
+    "regime.div.liquidation": {
+        "en": "🩸 Gold falling despite a weaker dollar and lower yields — looks like forced selling",
+        "my": "🩸 ဒေါ်လာနှင့် yields ကျနေသော်လည်း ရွှေကျနေ — အတင်းရောင်းချမှု ဖြစ်နိုင်",
+        "th": "🩸 ทองลงทั้งที่ดอลลาร์อ่อนและผลตอบแทนลดลง — น่าจะเป็นการเทขาย",
+    },
+    "regime.header": {
+        "en": "🔍 <b>Market Regime</b>",
+        "my": "🔍 <b>ဈေးကွက် အခြေအနေ</b>",
+        "th": "🔍 <b>สภาวะตลาด</b>",
+    },
+    "regime.calm": {
+        "en": "😴 Volatility {ratio}× normal — quiet market",
+        "my": "😴 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ — ငြိမ်သက်နေသည်",
+        "th": "😴 ความผันผวน {ratio} เท่าของปกติ — ตลาดเงียบ",
+    },
+    "regime.normal": {
+        "en": "🟢 Volatility {ratio}× normal",
+        "my": "🟢 ဈေးလှုပ်ရှားမှု ပုံမှန်ထက် {ratio} ဆ",
+        "th": "🟢 ความผันผวน {ratio} เท่าของปกติ",
+    },
+    "regime.unavailable": {
+        "en": "📊 Collecting data — {have}/{need} points needed for a volatility baseline",
+        "my": "📊 Data စုဆောင်းနေသည် — volatility baseline အတွက် {have}/{need} လိုအပ်သည်",
+        "th": "📊 กำลังเก็บข้อมูล — ต้องการ {have}/{need} จุดเพื่อคำนวณค่าฐาน",
+    },
+
+    # ── Economic event calendar ─────────────────────────────────
+    "event.type.fomc": {
+        "en": "FOMC rate decision", "my": "FOMC အတိုးနှုန်း ဆုံးဖြတ်ချက်",
+        "th": "การประชุม FOMC (ดอกเบี้ย)",
+    },
+    "event.type.cpi": {
+        "en": "US CPI inflation", "my": "US CPI ငွေကြေးဖောင်းပွမှု",
+        "th": "เงินเฟ้อ CPI สหรัฐ",
+    },
+    "event.type.nfp": {
+        "en": "US Non-Farm Payrolls", "my": "US Non-Farm Payrolls (အလုပ်အကိုင်)",
+        "th": "การจ้างงานนอกภาคเกษตรสหรัฐ",
+    },
+    "event.type.pce": {
+        "en": "US PCE inflation", "my": "US PCE ငွေကြေးဖောင်းပွမှု",
+        "th": "เงินเฟ้อ PCE สหรัฐ",
+    },
+    "event.type.other": {"en": "Scheduled release", "my": "သတ်မှတ်ထားသော ကြေညာချက်",
+                         "th": "การประกาศตามกำหนด"},
+
+    "predict.models_stale": {
+        "en": "ℹ️ Models are being rebuilt for the new event features — ML resumes after the 3am BKK retrain.",
+        "my": "ℹ️ Event features အသစ်အတွက် models ပြန်တည်ဆောက်နေပါသည် — 3am BKK retrain ပြီးမှ ML ပြန်ရပါမည်။",
+        "th": "ℹ️ กำลังสร้างโมเดลใหม่สำหรับฟีเจอร์เหตุการณ์ — ML จะกลับมาหลังเทรนรอบ 03:00 น. (BKK)",
+    },
+    "events.header": {
+        "en": "📅 <b>Upcoming Market Events</b>",
+        "my": "📅 <b>လာမည့် ဈေးကွက် အဖြစ်အပျက်များ</b>",
+        "th": "📅 <b>เหตุการณ์ตลาดที่กำลังจะมาถึง</b>",
+    },
+    "events.line": {
+        "en": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — in {countdown}",
+        "my": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — နောက် {countdown}",
+        "th": "{emoji} <b>{name}</b>{est}\n     {when} (BKK) — อีก {countdown}",
+    },
+    "events.estimated": {
+        "en": " <i>(estimated)</i>", "my": " <i>(ခန့်မှန်း)</i>",
+        "th": " <i>(ประมาณการ)</i>",
+    },
+    "events.none": {
+        "en": "📅 No scheduled events on the calendar.",
+        "my": "📅 သတ်မှတ်ထားသော အဖြစ်အပျက် မရှိပါ။",
+        "th": "📅 ไม่มีเหตุการณ์ในปฏิทิน",
+    },
+    "events.footer": {
+        "en": "ℹ️ Gold often moves sharply around these — timing only, not a forecast",
+        "my": "ℹ️ ဤအချိန်များတွင် ရွှေဈေး ပြင်းထန်စွာ လှုပ်ရှားတတ်သည် — အချိန်သာ၊ ခန့်မှန်းချက် မဟုတ်ပါ",
+        "th": "ℹ️ ราคาทองมักผันผวนแรงช่วงนี้ — บอกเวลาเท่านั้น ไม่ใช่การพยากรณ์",
+    },
+    "events.stale": {
+        "en": ("⚠️ <b>Calendar needs updating</b> — only {days}d of events left.\n"
+               "Refresh CALENDAR in events.py from federalreserve.gov / bls.gov."),
+        "my": ("⚠️ <b>Calendar update လိုအပ်သည်</b> — {days} ရက်စာသာ ကျန်တော့သည်။\n"
+               "events.py ထဲရှိ CALENDAR ကို federalreserve.gov / bls.gov မှ ပြန်ဖြည့်ပါ။"),
+        "th": ("⚠️ <b>ต้องอัปเดตปฏิทิน</b> — เหลือเหตุการณ์อีกเพียง {days} วัน\n"
+               "รีเฟรช CALENDAR ใน events.py จาก federalreserve.gov / bls.gov"),
+    },
+    "events.countdown_h": {"en": "{h}h {m}m", "my": "{h}h {m}m", "th": "{h} ชม. {m} น."},
+    "events.countdown_d": {"en": "{d}d {h}h", "my": "{d}d {h}h", "th": "{d} วัน {h} ชม."},
+
+    "events.banner_pre": {
+        "en": "\n⚠️ <b>{name} in {countdown}</b> — expect volatility",
+        "my": "\n⚠️ <b>{name} — နောက် {countdown}</b> — ဈေးလှုပ်ရှားမှု ကြီးနိုင်သည်",
+        "th": "\n⚠️ <b>{name} อีก {countdown}</b> — คาดว่าจะผันผวน",
+    },
+    "events.banner_post": {
+        "en": "\n📰 <b>{name} just released</b> — this move is likely event-driven",
+        "my": "\n📰 <b>{name} ထွက်ပြီ</b> — ဤဈေးလှုပ်ရှားမှုမှာ သတင်းကြောင့် ဖြစ်နိုင်သည်",
+        "th": "\n📰 <b>{name} เพิ่งประกาศ</b> — ราคาที่ขยับน่าจะมาจากข่าวนี้",
+    },
+    "events.ta_caution": {
+        "en": "\n⚠️ TA is unreliable inside an event window — treat the signal with caution",
+        "my": "\n⚠️ Event window အတွင်း TA မမှန်တတ်ပါ — signal ကို သတိဖြင့် သုံးပါ",
+        "th": "\n⚠️ TA ไม่น่าเชื่อถือในช่วงเหตุการณ์ — ใช้สัญญาณอย่างระมัดระวัง",
     },
 
     # ── Inline keyboard button labels ───────────────────────────

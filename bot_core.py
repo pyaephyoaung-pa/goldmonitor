@@ -22,9 +22,12 @@ from datetime import datetime
 import pytz
 import requests
 
+import events
 import i18n
+import news
 import storage
 import predictor
+import regime
 import goldapi
 import signals
 from gold_format import fmt, gold_breakdown
@@ -338,17 +341,108 @@ def cmd_chart(chat_id: str, args: str, lang: str):
 
 
 def cmd_macro(chat_id: str, lang: str):
-    """Show the macro & fear context (DXY / US10Y / VIX) on demand."""
-    block = signals.format_macro_block(lang=lang)
-    if not block:
+    """Macro context (DXY / US10Y / VIX) plus the current market regime.
+
+    The regime half needs no network at all — it is computed from the price
+    history we already store — so it is still shown when the macro fetch fails.
+    """
+    macro = signals.fetch_macro()
+    block = signals.format_macro_block(macro, lang) if macro else ""
+
+    history = storage.get_price_history()
+    vol = regime.vol_regime(history)
+    div_key = regime.divergence(
+        predictor.get_trend_summary(history).get("change_24h") if len(history) >= 2 else None,
+        macro,
+    )
+
+    lines = []
+    if block:
+        lines += [block, "━━━━━━━━━━━━━━━"]
+
+    lines.append(i18n.t("regime.header", lang))
+    if not vol.get("available"):
+        lines.append(i18n.t("regime.unavailable", lang,
+                            have=vol.get("have", 0), need=vol.get("need", 0)))
+    elif vol["level"] == "extreme":
+        lines.append(i18n.t("regime.vol_extreme", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    elif vol["level"] == "elevated":
+        lines.append(i18n.t("regime.vol_elevated", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    elif vol["level"] == "calm":
+        lines.append(i18n.t("regime.calm", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+    else:
+        lines.append(i18n.t("regime.normal", lang,
+                            ratio=regime.display_ratio(vol["ratio"])))
+
+    if vol.get("shock"):
+        lines.append(i18n.t("regime.shock", lang,
+                            sigma=regime.display_sigma(vol["sigma"]),
+                            move=vol["last_move"]))
+    if div_key:
+        lines.append(i18n.t(div_key, lang))
+
+    if not block and not vol.get("available"):
         send_message(i18n.t("macro.unavailable", lang), chat_id)
         return
-    send_message(
-        f"{block}\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"{i18n.t('macro.footer', lang)}",
-        chat_id,
+
+    lines += ["━━━━━━━━━━━━━━━", i18n.t("macro.footer", lang)]
+    send_message("\n".join(lines), chat_id)
+
+
+# ── /events — scheduled high-impact releases ────────────────────
+
+def format_countdown(hours: float, lang: str) -> str:
+    """"3d 4h" / "4h 20m" — coarse on purpose, these are not to-the-second."""
+    total_min = max(0, int(hours * 60))
+    if total_min >= 24 * 60:
+        return i18n.t("events.countdown_d", lang,
+                      d=total_min // (24 * 60), h=(total_min % (24 * 60)) // 60)
+    return i18n.t("events.countdown_h", lang, h=total_min // 60, m=total_min % 60)
+
+
+def format_event_line(event, now, lang: str) -> str:
+    return i18n.t(
+        "events.line", lang,
+        emoji=event.emoji,
+        name=i18n.t(event.label_key, lang),
+        est=i18n.t("events.estimated", lang) if event.estimated else "",
+        when=event.when(BANGKOK_TZ).strftime("%a %d %b, %H:%M"),
+        countdown=format_countdown(event.hours_until(now), lang),
     )
+
+
+def cmd_events(chat_id: str, lang: str):
+    now = datetime.now(pytz.UTC)
+    upcoming = events.upcoming(now, limit=6)
+    if not upcoming:
+        send_message(i18n.t("events.none", lang), chat_id)
+        return
+
+    lines = [i18n.t("events.header", lang), "━━━━━━━━━━━━━━━"]
+    lines += [format_event_line(e, now, lang) for e in upcoming]
+    lines += ["━━━━━━━━━━━━━━━", i18n.t("events.footer", lang)]
+
+    # Only the owner can act on a stale calendar, so only the owner is told.
+    status = events.calendar_status(now)
+    if status["stale"] and TG_CHAT_ID and chat_id == TG_CHAT_ID:
+        lines.append("")
+        lines.append(i18n.t("events.stale", lang, days=status["days_left"]))
+
+    send_message("\n".join(lines), chat_id)
+
+
+def cmd_news(chat_id: str, lang: str):
+    """Recent gold-related headlines. Context only — nothing is interpreted."""
+    headlines = news.fetch_headlines()
+    if not headlines:
+        # An empty list means either "source down" or "genuinely nothing", and
+        # the fetch layer logs which. Tell the user the recoverable one.
+        send_message(i18n.t("news.unavailable", lang), chat_id)
+        return
+    send_message(news.format_block(headlines, lang).lstrip("\n"), chat_id)
 
 
 def cmd_bought(chat_id: str, args: str, lang: str):
@@ -787,6 +881,8 @@ PUBLIC_COMMANDS = {
     "/price": lambda cid, _, lang: cmd_price(cid, lang),
     "/predict": lambda cid, _, lang: cmd_predict(cid, lang),
     "/macro": lambda cid, _, lang: cmd_macro(cid, lang),
+    "/events": lambda cid, _, lang: cmd_events(cid, lang),
+    "/news": lambda cid, _, lang: cmd_news(cid, lang),
     "/chart": cmd_chart,
     "/history": cmd_history,
     "/alert": cmd_alert,
