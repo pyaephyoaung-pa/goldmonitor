@@ -10,6 +10,7 @@
           "predictor.py",
           "events.py",
           "regime.py",
+          "news.py",
           "i18n.py",
           "goldapi.py",
           "gold_format.py",

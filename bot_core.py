@@ -24,6 +24,7 @@ import requests
 
 import events
 import i18n
+import news
 import storage
 import predictor
 import regime
@@ -431,6 +432,17 @@ def cmd_events(chat_id: str, lang: str):
         lines.append(i18n.t("events.stale", lang, days=status["days_left"]))
 
     send_message("\n".join(lines), chat_id)
+
+
+def cmd_news(chat_id: str, lang: str):
+    """Recent gold-related headlines. Context only — nothing is interpreted."""
+    headlines = news.fetch_headlines()
+    if not headlines:
+        # An empty list means either "source down" or "genuinely nothing", and
+        # the fetch layer logs which. Tell the user the recoverable one.
+        send_message(i18n.t("news.unavailable", lang), chat_id)
+        return
+    send_message(news.format_block(headlines, lang).lstrip("\n"), chat_id)
 
 
 def cmd_bought(chat_id: str, args: str, lang: str):
@@ -870,6 +882,7 @@ PUBLIC_COMMANDS = {
     "/predict": lambda cid, _, lang: cmd_predict(cid, lang),
     "/macro": lambda cid, _, lang: cmd_macro(cid, lang),
     "/events": lambda cid, _, lang: cmd_events(cid, lang),
+    "/news": lambda cid, _, lang: cmd_news(cid, lang),
     "/chart": cmd_chart,
     "/history": cmd_history,
     "/alert": cmd_alert,

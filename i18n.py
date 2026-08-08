@@ -773,6 +773,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📋 /alerts — your alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
                "📅 /events — upcoming FOMC / CPI / NFP releases\n"
+               "📰 /news — recent gold headlines (context only)\n"
                "📝 /bought &lt;THB&gt; — log a purchase\n"
                "📝 /sold &lt;THB&gt; — log a sale\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — edit an entry\n"
@@ -797,6 +798,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
                "📅 /events — လာမည့် FOMC / CPI / NFP ကြေညာချက်များ\n"
+               "📰 /news — ရွှေဆိုင်ရာ သတင်းများ (အခြေအနေသိရန်သာ)\n"
                "📝 /bought &lt;THB&gt; — ဝယ်ယူမှု မှတ်ပါ\n"
                "📝 /sold &lt;THB&gt; — ရောင်းချမှု မှတ်ပါ\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
@@ -821,6 +823,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📋 /alerts — การแจ้งเตือนของคุณ | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + คะแนนความกลัว\n"
                "📅 /events — FOMC / CPI / NFP ที่กำลังจะประกาศ\n"
+               "📰 /news — ข่าวทองล่าสุด (เป็นบริบทเท่านั้น)\n"
                "📝 /bought &lt;THB&gt; — บันทึกการซื้อ\n"
                "📝 /sold &lt;THB&gt; — บันทึกการขาย\n"
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — แก้ไขรายการ\n"
@@ -836,6 +839,28 @@ STRINGS: dict[str, dict[str, str]] = {
                "❓ /help — เมนูนี้\n"
                "━━━━━━━━━━━━━━━\n"
                "⚡ ตอบทันทีผ่าน webhook"),
+    },
+
+    # ── News headlines (context only — never a signal) ──────────
+    "news.header": {
+        "en": "📰 <b>Recent headlines</b>",
+        "my": "📰 <b>လတ်တလော သတင်းခေါင်းစဉ်များ</b>",
+        "th": "📰 <b>พาดหัวข่าวล่าสุด</b>",
+    },
+    "news.footer": {
+        "en": "ℹ️ Headlines for context — the bot does not interpret them or trade on them",
+        "my": "ℹ️ အခြေအနေ သိရှိရန်သာ — bot က ဤသတင်းများကို အဓိပ္ပာယ်ဖွင့်ခြင်း မရှိပါ",
+        "th": "ℹ️ พาดหัวข่าวเพื่อเป็นบริบท — บอทไม่ตีความและไม่ใช้ตัดสินใจซื้อขาย",
+    },
+    "news.none": {
+        "en": "📰 No recent gold-related headlines found.",
+        "my": "📰 ရွှေနှင့် သက်ဆိုင်သော သတင်း မတွေ့ပါ။",
+        "th": "📰 ไม่พบพาดหัวข่าวเกี่ยวกับทองล่าสุด",
+    },
+    "news.unavailable": {
+        "en": "⚠️ News source unavailable — please try again shortly",
+        "my": "⚠️ သတင်း ရင်းမြစ် ယူမရပါ — ခဏနေ ပြန်စမ်းပါ",
+        "th": "⚠️ แหล่งข่าวใช้งานไม่ได้ — ลองใหม่อีกสักครู่",
     },
 
     # ── Market regime (volatility + driver divergence) ──────────

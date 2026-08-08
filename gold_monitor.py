@@ -23,6 +23,7 @@ import pytz
 
 import events
 import i18n
+import news
 import storage
 import predictor
 import regime
@@ -331,6 +332,21 @@ def main():
     def regime_block(lang):
         return regime.format_block(vol, divergence_key, lang)
 
+    # ── Headlines (context only) ────────────────────────────────
+    # Fetched ONLY when the other two tiers say something happened: an
+    # unusual regime, or a release that just landed. That keeps this off the
+    # hot path for the ~288 quiet runs a day, and — more importantly — means
+    # headlines always appear as an explanation for a move the bot detected by
+    # other means, never as a standalone prompt to act.
+    _headline_cache = {}
+
+    def headline_block(lang):
+        if not (regime.is_unusual(vol) or event_phase == "post"):
+            return ""
+        if "items" not in _headline_cache:
+            _headline_cache["items"] = news.fetch_headlines()
+        return news.format_block(_headline_cache["items"], lang)
+
     # ── Drop Alerts (5 levels, equal spacing) ─────────────────────
     # Titles and advice are i18n keys, resolved per recipient language.
     DROP_LEVELS = [
@@ -357,6 +373,7 @@ def main():
         if out and event:
             out += i18n.t("events.ta_caution", lang)
         out += regime_block(lang)
+        out += headline_block(lang)
         return out
 
     for level in DROP_LEVELS:
@@ -485,6 +502,7 @@ def main():
                 extras += f"\n━━━━━━━━━━━━━━━\n{block}"
             extras += day_event_note(lang)
             extras += regime_block(lang)
+            extras += headline_block(lang)
             return i18n.t(
                 "monitor.evening", lang, when=time_str, price=fmt(thb_gram),
                 open=fmt(state["open_price"]), arrow=arrow, change=change,

@@ -37,6 +37,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/history [N]` | 📈 N-day price history (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
 | `/events` | 📅 Upcoming FOMC / CPI / NFP releases |
+| `/news` | 📰 Recent gold headlines (context only) |
 | `/subscribe` | 🔔 Receive morning/evening price alerts |
 | `/unsubscribe` | 🔕 Stop alerts |
 | `/settings` | ⚙️ View notification settings |
@@ -389,6 +390,68 @@ large", the other "this move is not explained by the usual drivers".
 
 ---
 
+## 📰 Headlines (context only)
+
+The final piece answers the question the other two provoke: *"something just
+happened — what was it?"*
+
+`/news` shows recent gold-related headlines from
+[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+**only when the regime detector or the event calendar already flagged
+something**, so headlines always arrive as an explanation for a move the bot
+detected by other means — never as a standalone prompt to act. That also keeps
+the fetch off the hot path for the ~288 quiet runs a day.
+
+**What this deliberately does NOT do:**
+
+- ❌ No sentiment scoring
+- ❌ No direction inferred from a headline
+- ❌ Never feeds a buy/sell signal, an alert threshold, or an ML feature
+
+Headline sentiment maps poorly onto gold's actual reaction — the same
+"conflict escalates" story can precede a rally or a fade depending on
+positioning, and the sign is not stable enough to trade on. Presenting it as a
+signal would contradict the honest-metrics posture the rest of this project
+holds to. Two tests exist purely to keep that boundary from eroding: one
+asserts no headline ever reaches the model, another fails if `news.py` ever
+grows a `sentiment` / `bullish` / `signal` function.
+
+Headlines are third-party text, so titles, URLs and domains are all
+HTML-escaped before they reach Telegram.
+
+---
+
+## 📰 သတင်းခေါင်းစဉ်များ (အခြေအနေ သိရှိရန်သာ)
+
+The final piece answers the question the other two provoke: *"something just
+happened — what was it?"*
+
+`/news` shows recent gold-related headlines from
+[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+**only when the regime detector or the event calendar already flagged
+something**, so headlines always arrive as an explanation for a move the bot
+detected by other means — never as a standalone prompt to act. That also keeps
+the fetch off the hot path for the ~288 quiet runs a day.
+
+**What this deliberately does NOT do:**
+
+- ❌ No sentiment scoring
+- ❌ No direction inferred from a headline
+- ❌ Never feeds a buy/sell signal, an alert threshold, or an ML feature
+
+Headline sentiment maps poorly onto gold's actual reaction — the same
+"conflict escalates" story can precede a rally or a fade depending on
+positioning, and the sign is not stable enough to trade on. Presenting it as a
+signal would contradict the honest-metrics posture the rest of this project
+holds to. Two tests exist purely to keep that boundary from eroding: one
+asserts no headline ever reaches the model, another fails if `news.py` ever
+grows a `sentiment` / `bullish` / `signal` function.
+
+Headlines are third-party text, so titles, URLs and domains are all
+HTML-escaped before they reach Telegram.
+
+---
+
 ## 📁 Files
 
 ```
@@ -396,6 +459,7 @@ goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
 ├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
 ├── regime.py                # Volatility regime + gold/driver divergence
+├── news.py                  # GDELT headlines — display only, no sentiment
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
@@ -466,6 +530,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
 | `/macro` | 🌍 DXY / US10Y / VIX + fear score |
 | `/events` | 📅 လာမည့် FOMC / CPI / NFP ကြေညာချက်များ |
+| `/news` | 📰 ရွှေဆိုင်ရာ သတင်းများ (အခြေအနေသိရန်သာ) |
 | `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
 | `/unsubscribe` | 🔕 Alerts ရပ်ပါ |
 | `/settings` | ⚙️ Notification settings ကြည့်ပါ |
@@ -655,6 +720,7 @@ goldmonitor/
 ├── gold_monitor.py          # Main monitor (alerts, summaries) — cron entrypoint
 ├── events.py                # Scheduled FOMC/CPI/NFP calendar + event windows
 ├── regime.py                # Volatility regime + gold/driver divergence
+├── news.py                  # GDELT headlines — display only, no sentiment
 ├── i18n.py                  # Translation catalogue (en / my / th) + t()
 ├── predictor.py             # TA indicators + ML prediction (honest OOS eval)
 ├── storage.py               # GitHub Gist persistent storage
