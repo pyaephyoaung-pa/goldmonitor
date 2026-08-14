@@ -49,3 +49,10 @@ def process_commands():
 
 if __name__ == "__main__":
     process_commands()
+    # Same reasoning as gold_monitor: a rejected token cannot announce itself
+    # over Telegram, so a failed run is the only signal left.
+    if bot_core.auth_failed():
+        raise SystemExit(
+            "TELEGRAM_BOT_TOKEN was rejected (401). Update it in the GitHub "
+            "repo secrets and in Vercel."
+        )

@@ -190,6 +190,12 @@ minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert in
 of silent failure; Telegram rate limits (429) are respected with retry; owner
 commands fail closed if `TELEGRAM_CHAT_ID` is unset.
 
+**Dead token → red run:** a revoked `TELEGRAM_BOT_TOKEN` cannot report itself —
+the alert would need the same token. Every Telegram call is deliberately
+error-swallowing, so the symptom used to be a *green run that sent nothing*.
+Both entrypoints now detect a 401 and exit non-zero, turning the Actions run red
+so GitHub emails you.
+
 **Webhook watchdog:** a webhook that is *registered but rejecting updates* is the
 worst failure mode here — the poller self-disables because a webhook exists, the
 webhook drops everything, and nothing raises. Commands just stop. Both the monitor
@@ -690,6 +696,12 @@ models work in the real world, not just in backtests.
 minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert instead
 of silent failure; Telegram rate limits (429) are respected with retry; owner
 commands fail closed if `TELEGRAM_CHAT_ID` is unset.
+
+**Dead token → red run:** a revoked `TELEGRAM_BOT_TOKEN` cannot report itself —
+the alert would need the same token. Every Telegram call is deliberately
+error-swallowing, so the symptom used to be a *green run that sent nothing*.
+Both entrypoints now detect a 401 and exit non-zero, turning the Actions run red
+so GitHub emails you.
 
 **Webhook watchdog:** a webhook that is *registered but rejecting updates* is the
 worst failure mode here — the poller self-disables because a webhook exists, the
