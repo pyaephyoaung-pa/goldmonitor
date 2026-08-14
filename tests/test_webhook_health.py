@@ -214,3 +214,57 @@ def test_poller_still_polls_when_no_webhook(monkeypatch):
 
     bot_commands.process_commands()
     assert warned == [], "no webhook means nothing to warn about"
+
+
+# ── setup_webhook.py error reporting ────────────────────────────
+#
+# Telegram keeps last_error_message long after the fault clears, so the setup
+# script has to distinguish "failing right now" from "failed earlier, since
+# fixed" — otherwise it tells you nothing at the exact moment you are trying
+# to confirm a fix.
+
+import setup_webhook
+
+
+def test_setup_reports_still_failing(capsys):
+    now = time.time()
+    setup_webhook._report_last_error(
+        {"last_error_message": "Wrong response from the webhook: 403 Forbidden",
+         "last_error_date": int(now - 5)},
+        registered_at=now - 30,
+    )
+    out = capsys.readouterr().out
+    assert "STILL FAILING" in out
+    assert "does not match" in out, "must name the likely cause"
+
+
+def test_setup_reports_stale_error(capsys):
+    now = time.time()
+    setup_webhook._report_last_error(
+        {"last_error_message": "403 Forbidden", "last_error_date": int(now - 7200)},
+        registered_at=now - 30,
+    )
+    out = capsys.readouterr().out
+    assert "PRE-DATES" in out
+    assert "STILL FAILING" not in out
+
+
+def test_setup_reports_healthy(capsys):
+    setup_webhook._report_last_error({}, registered_at=time.time())
+    assert "healthy" in capsys.readouterr().out
+
+
+def test_setup_handles_missing_timestamp(capsys):
+    setup_webhook._report_last_error(
+        {"last_error_message": "boom"}, registered_at=time.time())
+    out = capsys.readouterr().out
+    assert "no timestamp" in out
+    assert "STILL FAILING" not in out, "cannot claim that without a timestamp"
+
+
+def test_ago_formatting():
+    assert setup_webhook._ago(5) == "5s ago"
+    assert setup_webhook._ago(300) == "5m ago"
+    assert setup_webhook._ago(7200) == "2h 0m ago"
+    assert setup_webhook._ago(200000) == "2d ago"
+    assert setup_webhook._ago(-10) == "0s ago", "clock skew must not go negative"

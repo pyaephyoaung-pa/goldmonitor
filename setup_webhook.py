@@ -12,6 +12,9 @@ Requires env vars: TELEGRAM_BOT_TOKEN, WEBHOOK_SECRET (optional)
 
 import os
 import sys
+import time
+from datetime import datetime
+
 import requests
 
 TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -41,6 +44,9 @@ def set_webhook(base_url: str):
     }
 
     print(f"Setting webhook to: {webhook_url}")
+    # Recorded BEFORE the call: any error newer than this is post-registration,
+    # i.e. the fix did not work.
+    registered_at = time.time()
     r = requests.post(
         f"https://api.telegram.org/bot{TG_BOT_TOKEN}/setWebhook",
         json=payload,
@@ -63,7 +69,57 @@ def set_webhook(base_url: str):
     print(f"\nWebhook info:")
     print(f"  URL: {info.get('url')}")
     print(f"  Pending updates: {info.get('pending_update_count', 0)}")
-    print(f"  Last error: {info.get('last_error_message', 'none')}")
+    _report_last_error(info, registered_at)
+
+
+def _report_last_error(info: dict, registered_at: float):
+    """Print the last webhook error WITH ITS AGE, and say what it means.
+
+    Telegram keeps `last_error_message` long after the fault clears, so a bare
+    print makes a stale error from hours ago look identical to one happening
+    right now — which is actively misleading at exactly the moment you are
+    trying to confirm a fix. Comparing its timestamp against the moment we
+    re-registered separates the two.
+    """
+    error = info.get("last_error_message")
+    if not error:
+        print("  Last error: none — webhook is healthy ✅")
+        return
+
+    when = info.get("last_error_date")
+    if not when:
+        print(f"  Last error: {error} (no timestamp)")
+        return
+
+    age = time.time() - when
+    stamp = datetime.fromtimestamp(when).strftime("%H:%M:%S")
+    print(f"  Last error: {error}")
+    print(f"              at {stamp}, {_ago(age)}")
+
+    if when >= registered_at:
+        print("\n  ❌ STILL FAILING — this error is NEWER than the registration"
+              " you just made.")
+        print("     Most likely: WEBHOOK_SECRET here does not match the value in")
+        print("     the Vercel environment, or Vercel has not been redeployed")
+        print("     since it was set. Both sides must hold the same string.")
+    else:
+        print("\n  ℹ️  This error PRE-DATES the registration you just made, so it")
+        print("     may already be fixed. Telegram keeps the last error around")
+        print("     even after it clears.")
+        print("     Confirm: send your bot a message, wait ~10s, then re-run")
+        print("     getWebhookInfo. If the error timestamp does NOT advance,")
+        print("     the webhook is working.")
+
+
+def _ago(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s ago"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h {(seconds % 3600) // 60}m ago"
+    return f"{seconds // 86400}d ago"
 
 
 def delete_webhook():
