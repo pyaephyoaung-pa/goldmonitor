@@ -145,23 +145,124 @@ def get_updates(offset: int = 0) -> list:
         return []
 
 
-def webhook_is_configured() -> bool:
-    """True if a Telegram webhook URL is set.
-
-    Telegram refuses getUpdates (HTTP 409) while a webhook is active, so the
-    poller uses this to self-disable and avoid wasted, conflicting runs.
-    """
+def webhook_status() -> dict:
+    """Raw getWebhookInfo result ({} if unset or unreachable)."""
     if not TG_BOT_TOKEN:
-        return False
+        return {}
     try:
         r = requests.get(
             f"https://api.telegram.org/bot{TG_BOT_TOKEN}/getWebhookInfo",
             timeout=10,
         )
         r.raise_for_status()
-        return bool(r.json().get("result", {}).get("url"))
+        return r.json().get("result", {}) or {}
     except Exception as e:
         print(f"[bot] getWebhookInfo error: {e}")
+        return {}
+
+
+def webhook_is_configured() -> bool:
+    """True if a Telegram webhook URL is set.
+
+    Telegram refuses getUpdates (HTTP 409) while a webhook is active, so the
+    poller uses this to self-disable and avoid wasted, conflicting runs.
+    """
+    return bool(webhook_status().get("url"))
+
+
+# ── Webhook health ──────────────────────────────────────────────
+#
+# A webhook that is registered but REJECTING updates is the worst failure this
+# bot has: the poller self-disables because a webhook exists, the webhook drops
+# everything on the floor, and nothing anywhere raises. Commands simply stop,
+# silently, until somebody notices by hand. (Exactly that happened after
+# WEBHOOK_SECRET was made mandatory — Vercel had the secret but Telegram was
+# never re-registered to send it, so every update 403'd.)
+#
+# Sending still works while receiving is broken — they are separate API calls —
+# so the bot can always tell the owner about it.
+
+WEBHOOK_ERROR_WINDOW_MIN = 90   # an error this recent counts as "happening now"
+WEBHOOK_PENDING_ALERT = 10      # updates piling up unconsumed
+WEBHOOK_WARN_INTERVAL_H = 6     # do not nag on every run
+
+
+def webhook_health(status: dict | None = None) -> dict:
+    """Assess the webhook. `healthy` is True when there is nothing to report.
+
+    A webhook that is not configured at all is NOT unhealthy — that is the
+    valid polling setup.
+    """
+    info = webhook_status() if status is None else status
+    url = info.get("url") or ""
+    if not url:
+        return {"configured": False, "healthy": True, "reason": None,
+                "pending": 0, "error": "", "url": ""}
+
+    pending = info.get("pending_update_count", 0) or 0
+    error = info.get("last_error_message", "") or ""
+    error_at = info.get("last_error_date")
+
+    recent_error = False
+    if error and error_at:
+        try:
+            age_min = (datetime.now(pytz.UTC)
+                       - datetime.fromtimestamp(error_at, pytz.UTC)).total_seconds() / 60
+            recent_error = 0 <= age_min <= WEBHOOK_ERROR_WINDOW_MIN
+        except (ValueError, OSError, TypeError):
+            recent_error = False
+
+    reason = None
+    if recent_error:
+        reason = "error"
+    elif pending >= WEBHOOK_PENDING_ALERT:
+        # No recent error but a backlog: updates are arriving and not clearing.
+        reason = "backlog"
+
+    return {"configured": True, "healthy": reason is None, "reason": reason,
+            "pending": pending, "error": error, "url": url}
+
+
+def warn_owner_if_webhook_broken(bot_state: dict) -> bool:
+    """Tell the owner when the webhook is registered but not delivering.
+
+    Throttled via `bot_state`, which the CALLER persists — returns True when
+    something changed and a save is worthwhile. Never raises: a monitoring
+    check must not be able to break the thing it monitors.
+    """
+    if not (TG_BOT_TOKEN and TG_CHAT_ID):
+        return False
+    try:
+        health = webhook_health()
+        if health["healthy"]:
+            # Recovered: clear the stamp so the next outage warns immediately.
+            return bool(bot_state.pop("webhook_warned_at", None))
+
+        last = bot_state.get("webhook_warned_at")
+        if last:
+            try:
+                age_h = (datetime.now(pytz.UTC)
+                         - datetime.fromisoformat(last)).total_seconds() / 3600
+                if 0 <= age_h < WEBHOOK_WARN_INTERVAL_H:
+                    return False
+            except (ValueError, TypeError):
+                pass  # unparseable stamp — treat as never warned
+
+        lang = storage.get_user_lang(TG_CHAT_ID)
+        key = ("webhook.broken_error" if health["reason"] == "error"
+               else "webhook.broken_backlog")
+        send_message(
+            i18n.t(key, lang,
+                   error=html_module.escape(health["error"] or "—"),
+                   pending=health["pending"]),
+            TG_CHAT_ID,
+        )
+        print(f"[bot] WEBHOOK UNHEALTHY ({health['reason']}): "
+              f"{health['error']!r} pending={health['pending']}")
+        bot_state["webhook_warned_at"] = datetime.now(pytz.UTC).isoformat()
+        return True
+    except Exception as e:
+        print(f"[bot] webhook health check failed: {e}")
         return False
 
 

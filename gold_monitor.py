@@ -539,6 +539,18 @@ def main():
             else:
                 print("[ML] Training skipped or failed")
 
+    # ── Webhook watchdog ────────────────────────────────────────
+    # Runs here, not just in the poller, because the poller workflow can be
+    # disabled — and was, for three months, while a broken webhook silently
+    # swallowed every command. This job is the one that always runs.
+    # Throttled to one warning per WEBHOOK_WARN_INTERVAL_H and wrapped so a
+    # monitoring check can never take down the monitor.
+    try:
+        if bot_core.warn_owner_if_webhook_broken(_bot_state):
+            storage.save_bot_state(_bot_state)
+    except Exception as e:
+        print(f"[monitor] webhook health check failed: {e}")
+
     print("  Done.")
 
 
