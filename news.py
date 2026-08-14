@@ -69,9 +69,25 @@ MAX_FEED_BYTES = 2_000_000
 # Chart", per-country rate listings. Matched case-insensitively on the title.
 NOISE_MARKERS = (
     "live gold price", "streaming chart", "price chart", "rates on ",
-    "gold rate today", "gold price today in", "gold price in ",
+    "gold rate today", "gold price today", "today gold price",
+    "latest gold rate", "gold price in ", "gold rate in ",
     "price in india", "closing price", "technical analysis for",
+    "carat gold price", "22k", "24k",
 )
+
+# Structural rules, tuned against a live 100-item feed rather than guessed.
+#
+# Aggregator/widget spam stacks several labels into one title:
+#   "Today Gold Price | Latest Gold Rate | 20-07-2026 | ... Hyderabad | YOYO TV"
+# but legitimate posts do use a couple of separators:
+#   "China gold market update: Strong official buying | Post by Ray Jia | Insight"
+# so the cut is ABOVE two, not at two.
+MAX_TITLE_PIPES = 2
+
+# Feeds carry bare section labels ("Videos", "Markets") that are not headlines.
+# Kept deliberately low: a real headline can be short ("Gold hits record high",
+# 21 chars), so this only catches one- or two-word labels.
+MIN_TITLE_CHARS = 15
 
 # GDELT query syntax. Kept narrow: broad "gold" alone pulls in sport medals,
 # "gold standard" idioms and mining-company PR.
@@ -136,8 +152,17 @@ def _dedupe(articles: list) -> list:
 
 
 def is_noise(title: str) -> bool:
-    """True for evergreen quote/chart pages masquerading as headlines."""
-    lowered = (title or "").lower()
+    """True for evergreen quote/chart pages masquerading as headlines.
+
+    Three passes: too short to be a headline, too many separators to be
+    anything but an aggregator label stack, or a known quote-page phrase.
+    """
+    text = (title or "").strip()
+    if len(text) < MIN_TITLE_CHARS:
+        return True
+    if text.count("|") > MAX_TITLE_PIPES:
+        return True
+    lowered = text.lower()
     return any(marker in lowered for marker in NOISE_MARKERS)
 
 
