@@ -280,3 +280,132 @@ def test_headline_gate_matches_regime_and_event(monkeypatch):
     assert (regime.is_unusual(unusual) or "pre" == "post") is True
     assert (regime.is_unusual(quiet) or "post" == "post") is True, "event post fires it"
     assert (regime.is_unusual(quiet) or "pre" == "post") is False
+
+
+# ── Google News RSS (primary source) ────────────────────────────
+#
+# GDELT was demoted after live testing: it answers HTTP 429 on most calls from
+# shared/serverless IPs, so /news failed almost every time. These pin the
+# primary path and the fallback ordering.
+
+RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Gold heads for weekly loss as rally unwinds - CNBC</title>
+<link>https://cnbc.com/a</link><pubDate>Fri, 14 Aug 2026 04:18:59 GMT</pubDate></item>
+<item><title>UBS sees gold challenging $5,000/oz - KITCO</title>
+<link>https://kitco.com/b</link><pubDate>Thu, 13 Aug 2026 15:33:55 GMT</pubDate></item>
+<item><title>Gold Price Canada Today | Live Gold Price in CAD - KITCO</title>
+<link>https://kitco.com/c</link><pubDate>Thu, 13 Aug 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+class _RssResp:
+    def __init__(self, content=RSS, status=200):
+        self.content = content
+        self.status_code = status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise OSError(f"HTTP {self.status_code}")
+
+
+def test_google_news_is_parsed(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp())
+    out = news.fetch_headlines(limit=5)
+    titles = [h["title"] for h in out]
+    assert any("weekly loss" in t for t in titles)
+    assert any("UBS" in t for t in titles)
+
+
+def test_google_source_is_split_from_title(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp())
+    out = news.fetch_headlines(limit=5)
+    top = next(h for h in out if "weekly loss" in h["title"])
+    assert top["domain"] == "CNBC"
+    assert "- CNBC" not in top["title"], "source suffix must be stripped"
+
+
+def test_split_title_uses_the_last_dash():
+    """Headlines contain their own dashes."""
+    head, src = news._split_google_title(
+        "Gold Price Outlook: Speed Bump - Seems Unlikely - FOREX.com")
+    assert head == "Gold Price Outlook: Speed Bump - Seems Unlikely"
+    assert src == "FOREX.com"
+
+
+def test_split_title_without_a_source():
+    head, src = news._split_google_title("Gold rises")
+    assert head == "Gold rises" and src == ""
+
+
+def test_split_title_ignores_a_long_trailing_segment():
+    """A long tail after ' - ' is part of the headline, not a source name."""
+    raw = "Gold rises - and analysts now expect a sustained multi-quarter rally"
+    head, src = news._split_google_title(raw)
+    assert src == "" and head == raw
+
+
+def test_live_quote_pages_are_filtered(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp())
+    titles = [h["title"] for h in news.fetch_headlines(limit=10)]
+    assert not any("Live Gold Price" in t for t in titles)
+
+
+def test_is_noise_markers():
+    assert news.is_noise("Gold Price Canada Today | Live Gold Price in CAD")
+    assert news.is_noise("Gold Futures Streaming Chart")
+    assert news.is_noise("Gold price in Saudi Arabia: Rates on August 14")
+    assert not news.is_noise("Gold falls after US inflation data")
+
+
+def test_gdelt_not_used_when_google_succeeds(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp())
+
+    def must_not_run(*a, **k):
+        raise AssertionError("GDELT must not be called when Google News works")
+    monkeypatch.setattr(news, "_fetch_gdelt", must_not_run)
+    assert news.fetch_headlines(limit=3)
+
+
+def test_falls_back_to_gdelt_when_google_fails(monkeypatch):
+    monkeypatch.setattr(news, "_fetch_google_news", lambda limit: [])
+    monkeypatch.setattr(news, "_fetch_gdelt",
+                        lambda q, l, t: [{"title": "Gold up on Fed pause",
+                                          "url": "https://x/1", "domain": "reuters.com",
+                                          "seen": None}])
+    out = news.fetch_headlines(limit=3)
+    assert out and "Fed pause" in out[0]["title"]
+
+
+def test_both_sources_down_returns_empty(monkeypatch):
+    monkeypatch.setattr(news, "_fetch_google_news", lambda limit: [])
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+    assert news.fetch_headlines() == []
+
+
+def test_malformed_rss_degrades(monkeypatch, capsys):
+    monkeypatch.setattr(news.requests, "get",
+                        lambda *a, **k: _RssResp(b"<rss><unclosed>"))
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+    assert news.fetch_headlines() == []
+    assert "google news fetch failed" in capsys.readouterr().out
+
+
+def test_oversized_feed_is_refused(monkeypatch, capsys):
+    big = b"x" * (news.MAX_FEED_BYTES + 1)
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp(big))
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+    assert news.fetch_headlines() == []
+    assert "too large" in capsys.readouterr().out
+
+
+def test_google_http_error_degrades(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp(status=429))
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+    assert news.fetch_headlines() == []
+
+
+def test_rfc822_dates_are_parsed():
+    dt = news._parse_rfc822("Fri, 14 Aug 2026 04:18:59 GMT")
+    assert dt is not None and dt.year == 2026 and dt.tzinfo is not None
+    assert news._parse_rfc822("garbage") is None
+    assert news._parse_rfc822("") is None
