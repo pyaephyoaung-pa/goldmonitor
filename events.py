@@ -17,9 +17,14 @@ Nothing here forecasts anything — it says "something scheduled is happening",
 which is a fact, not an opinion.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️  THE DATES IN `CALENDAR` BELOW MUST BE VERIFIED AND KEPT UP TO DATE.
+⚠️  THE DATES IN `CALENDAR` BELOW MUST BE KEPT UP TO DATE.
     They are the one part of this feature that cannot be derived or tested
     into correctness — a wrong date makes the warnings worse than useless.
+
+    STATUS: FOMC verified against federalreserve.gov on 2026-08-14, covering
+    the rest of 2026 and all of 2027. CPI and PCE are NOT in the table —
+    bls.gov and bea.gov return 403 to automated clients, so those have to be
+    added by hand.
 
     FOMC : https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     CPI  : https://www.bls.gov/schedule/news_release/cpi.htm
@@ -72,10 +77,28 @@ EVENT_TYPES = {
 # FOMC statements land 14:00 ET on the SECOND day of a two-day meeting; the
 # date below is that second day.
 CALENDAR = [
-    # ── 2026 H2 — VERIFY THESE ──
+    # ── FOMC 2026 — VERIFIED against federalreserve.gov on 2026-08-14 ──
     ("2026-09-16", "fomc"),
     ("2026-10-28", "fomc"),
     ("2026-12-09", "fomc"),
+
+    # ── FOMC 2027 — published on the same page, but the Fed states that
+    #    "each meeting date is tentative until confirmed at the meeting
+    #    immediately preceding it", so treat these as provisional.
+    ("2027-01-27", "fomc"),
+    ("2027-03-17", "fomc"),
+    ("2027-04-28", "fomc"),
+    ("2027-06-09", "fomc"),
+    ("2027-07-28", "fomc"),
+    ("2027-09-15", "fomc"),
+    ("2027-10-27", "fomc"),
+    ("2027-12-08", "fomc"),
+
+    # ── CPI / PCE — STILL MISSING ──
+    # bls.gov and bea.gov block automated fetches (HTTP 403), so these could
+    # not be verified programmatically. Add them by hand from the schedules
+    # linked above; until then the calendar covers FOMC only, and CPI/PCE
+    # releases will pass without a warning.
 ]
 
 # Some releases follow a published rule rather than an ad-hoc date, so they can
