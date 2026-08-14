@@ -409,8 +409,11 @@ large", the other "this move is not explained by the usual drivers".
 The final piece answers the question the other two provoke: *"something just
 happened — what was it?"*
 
-`/news` shows recent gold-related headlines from
-[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+`/news` shows recent gold-related headlines from **Google News RSS** (free,
+keyless), falling back to [GDELT](https://www.gdeltproject.org/) if that fails.
+GDELT was the original primary and proved unusable alone: it answers HTTP 429
+on most calls from shared/serverless IPs, and its relevance for this query is
+poor (mining-company earnings calls, unrelated market wraps). In alerts they appear
 **only when the regime detector or the event calendar already flagged
 something**, so headlines always arrive as an explanation for a move the bot
 detected by other means — never as a standalone prompt to act. That also keeps
@@ -440,8 +443,11 @@ HTML-escaped before they reach Telegram.
 The final piece answers the question the other two provoke: *"something just
 happened — what was it?"*
 
-`/news` shows recent gold-related headlines from
-[GDELT](https://www.gdeltproject.org/) (free, keyless). In alerts they appear
+`/news` shows recent gold-related headlines from **Google News RSS** (free,
+keyless), falling back to [GDELT](https://www.gdeltproject.org/) if that fails.
+GDELT was the original primary and proved unusable alone: it answers HTTP 429
+on most calls from shared/serverless IPs, and its relevance for this query is
+poor (mining-company earnings calls, unrelated market wraps). In alerts they appear
 **only when the regime detector or the event calendar already flagged
 something**, so headlines always arrive as an explanation for a move the bot
 detected by other means — never as a standalone prompt to act. That also keeps
