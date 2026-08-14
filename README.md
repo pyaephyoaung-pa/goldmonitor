@@ -190,6 +190,14 @@ minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert in
 of silent failure; Telegram rate limits (429) are respected with retry; owner
 commands fail closed if `TELEGRAM_CHAT_ID` is unset.
 
+**Webhook watchdog:** a webhook that is *registered but rejecting updates* is the
+worst failure mode here — the poller self-disables because a webhook exists, the
+webhook drops everything, and nothing raises. Commands just stop. Both the monitor
+and the poller now check `getWebhookInfo` and send the owner a 🛑 alert (at most
+once every 6h) naming the Telegram error and the fix. The check lives in the
+**monitor** as well as the poller, because the poller workflow can itself be
+disabled.
+
 ---
 
 ## 🌐 Language (English / မြန်မာ / ไทย)
@@ -682,6 +690,14 @@ models work in the real world, not just in backtests.
 minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert instead
 of silent failure; Telegram rate limits (429) are respected with retry; owner
 commands fail closed if `TELEGRAM_CHAT_ID` is unset.
+
+**Webhook watchdog:** a webhook that is *registered but rejecting updates* is the
+worst failure mode here — the poller self-disables because a webhook exists, the
+webhook drops everything, and nothing raises. Commands just stop. Both the monitor
+and the poller now check `getWebhookInfo` and send the owner a 🛑 alert (at most
+once every 6h) naming the Telegram error and the fix. The check lives in the
+**monitor** as well as the poller, because the poller workflow can itself be
+disabled.
 
 ---
 

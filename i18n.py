@@ -841,6 +841,47 @@ STRINGS: dict[str, dict[str, str]] = {
                "⚡ ตอบทันทีผ่าน webhook"),
     },
 
+    # ── Webhook health (owner-only operational alert) ───────────
+    "webhook.broken_error": {
+        "en": ("🛑 <b>Webhook is rejecting updates</b>\n"
+               "Telegram says: <code>{error}</code>\n"
+               "Pending: {pending}\n"
+               "━━━━━━━━━━━━━━━\n"
+               "Commands are NOT reaching the bot. The poller cannot take over "
+               "while a webhook is registered.\n"
+               "Fix: re-run <code>setup_webhook.py</code> with the same "
+               "WEBHOOK_SECRET as Vercel, or delete the webhook "
+               "(<code>--delete</code>) and re-enable the poller workflow."),
+        "my": ("🛑 <b>Webhook က updates များ လက်မခံပါ</b>\n"
+               "Telegram: <code>{error}</code>\n"
+               "Pending: {pending}\n"
+               "━━━━━━━━━━━━━━━\n"
+               "Commands များ bot ဆီ မရောက်ပါ။ Webhook ရှိနေသရွေ့ poller က "
+               "အစားထိုး၍ မရပါ။\n"
+               "ဖြေရှင်းရန်: Vercel ရှိ WEBHOOK_SECRET အတိုင်း "
+               "<code>setup_webhook.py</code> ပြန်run ပါ၊ သို့မဟုတ် webhook ကို "
+               "<code>--delete</code> ဖြင့် ဖျက်ပြီး poller workflow ပြန်ဖွင့်ပါ။"),
+        "th": ("🛑 <b>Webhook ปฏิเสธ update</b>\n"
+               "Telegram แจ้ง: <code>{error}</code>\n"
+               "ค้างอยู่: {pending}\n"
+               "━━━━━━━━━━━━━━━\n"
+               "คำสั่งไม่ถึงบอท และ poller ทำงานแทนไม่ได้ตราบใดที่ยังมี webhook\n"
+               "แก้ไข: รัน <code>setup_webhook.py</code> ใหม่ด้วย WEBHOOK_SECRET "
+               "เดียวกับ Vercel หรือลบ webhook (<code>--delete</code>) "
+               "แล้วเปิด workflow poller อีกครั้ง"),
+    },
+    "webhook.broken_backlog": {
+        "en": ("⚠️ <b>Webhook backlog building up</b>\n"
+               "{pending} updates pending and not clearing.\n"
+               "The endpoint may be down or timing out — check the Vercel logs."),
+        "my": ("⚠️ <b>Webhook တွင် updates စုပုံနေသည်</b>\n"
+               "{pending} ခု ကျန်နေပြီး မလျော့ပါ။\n"
+               "Endpoint ပျက်နေခြင်း ဖြစ်နိုင်သည် — Vercel logs စစ်ပါ။"),
+        "th": ("⚠️ <b>Webhook มี update ค้างสะสม</b>\n"
+               "ค้างอยู่ {pending} รายการและไม่ลดลง\n"
+               "endpoint อาจล่มหรือ timeout — ตรวจสอบ log ของ Vercel"),
+    },
+
     # ── News headlines (context only — never a signal) ──────────
     "news.header": {
         "en": "📰 <b>Recent headlines</b>",
