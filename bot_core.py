@@ -37,6 +37,48 @@ TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
+# ── Dead-token detection ────────────────────────────────────────
+#
+# Every Telegram failure in this module is swallowed on purpose: one flaky send
+# should not abort a monitor run. But that makes a REVOKED TOKEN invisible —
+# every call 401s, every error is caught, the cron reports success, and no
+# message ever leaves. Green and mute is the worst state to be in.
+#
+# It also cannot be reported the usual way: an alert about a dead token would
+# need that same dead token to send it. So the only signal left is the process
+# itself failing, which turns the Actions run red and emails the owner.
+
+_AUTH_FAILED = False
+
+
+def auth_failed() -> bool:
+    """True if Telegram rejected the bot token (401) at any point this run."""
+    return _AUTH_FAILED
+
+
+def reset_auth_state():
+    """Test hook — each cron run is a fresh process, so nothing else needs it."""
+    global _AUTH_FAILED
+    _AUTH_FAILED = False
+
+
+def _note_auth_failure(where: str):
+    global _AUTH_FAILED
+    if not _AUTH_FAILED:  # first occurrence only; every later call would 401 too
+        print(f"[bot] ❌ TELEGRAM TOKEN REJECTED (401) during {where}.")
+        print("[bot]    No message can be sent, including this warning.")
+        print("[bot]    Update TELEGRAM_BOT_TOKEN in the GitHub repo secrets"
+              " (and Vercel) to the current token from @BotFather.")
+    _AUTH_FAILED = True
+
+
+def _is_unauthorized(response=None, payload: dict | None = None) -> bool:
+    """Telegram signals a bad token as HTTP 401 and error_code 401."""
+    if response is not None and getattr(response, "status_code", None) == 401:
+        return True
+    return bool(payload) and payload.get("error_code") == 401
+
+
 # ── Telegram I/O ────────────────────────────────────────────────
 
 def send_message(text: str, chat_id: str = "", reply_markup: dict | None = None) -> dict | None:
@@ -62,6 +104,9 @@ def send_message(text: str, chat_id: str = "", reply_markup: dict | None = None)
         resp = r.json()
         if resp.get("ok"):
             return resp
+        if _is_unauthorized(r, resp):
+            _note_auth_failure("sendMessage")
+            return resp  # retrying cannot help — the token itself is rejected
         print(f"[bot] Telegram error: {resp.get('description')} (code={resp.get('error_code')})")
         # 429 Too Many Requests — respect Telegram's retry_after and retry once.
         if resp.get("error_code") == 429:
@@ -138,6 +183,9 @@ def get_updates(offset: int = 0) -> list:
             params={"offset": offset, "timeout": 5, "limit": 20},
             timeout=15,
         )
+        if _is_unauthorized(r):
+            _note_auth_failure("getUpdates")
+            return []
         r.raise_for_status()
         return r.json().get("result", [])
     except Exception as e:
@@ -154,6 +202,9 @@ def webhook_status() -> dict:
             f"https://api.telegram.org/bot{TG_BOT_TOKEN}/getWebhookInfo",
             timeout=10,
         )
+        if _is_unauthorized(r):
+            _note_auth_failure("getWebhookInfo")
+            return {}
         r.raise_for_status()
         return r.json().get("result", {}) or {}
     except Exception as e:
@@ -234,6 +285,11 @@ def warn_owner_if_webhook_broken(bot_state: dict) -> bool:
         return False
     try:
         health = webhook_health()
+        if auth_failed():
+            # The token is dead: webhook_status() returned {} because of a 401,
+            # not because no webhook is set — and any warning we sent would be
+            # rejected too. gold_monitor turns this into a failed run instead.
+            return False
         if health["healthy"]:
             # Recovered: clear the stamp so the next outage warns immediately.
             return bool(bot_state.pop("webhook_warned_at", None))

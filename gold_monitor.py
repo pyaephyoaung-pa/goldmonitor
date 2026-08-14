@@ -566,7 +566,7 @@ def run():
     except Exception as e:
         print(f"[monitor] CRASH: {e}")
         traceback.print_exc()
-        if TG_BOT_TOKEN and TG_CHAT_ID:
+        if TG_BOT_TOKEN and TG_CHAT_ID and not bot_core.auth_failed():
             err = str(e)[:300]
             try:
                 owner_lang = storage.get_user_lang(TG_CHAT_ID)
@@ -578,6 +578,19 @@ def run():
                 TG_CHAT_ID,
             )
         raise  # keep the Actions run red
+
+    # A revoked token cannot be reported BY Telegram — the alert needs the same
+    # token. Everything above still ran (prices fetched, history stored), but
+    # not one message escaped. Fail the process so the Actions run goes red and
+    # GitHub emails the owner; a green-but-mute run is the state that hid this
+    # for hours.
+    if bot_core.auth_failed():
+        raise SystemExit(
+            "TELEGRAM_BOT_TOKEN was rejected (401). Prices were collected but "
+            "NO alerts could be sent. Update the token in the GitHub repo "
+            "secrets (Settings -> Secrets and variables -> Actions) and in "
+            "Vercel, using the current token from @BotFather."
+        )
 
 
 if __name__ == "__main__":
