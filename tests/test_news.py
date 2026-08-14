@@ -79,16 +79,16 @@ def test_unexpected_payload_shape_degrades(monkeypatch, capsys):
 
 
 def test_bad_seendate_does_not_raise(monkeypatch):
-    _mock(monkeypatch, _Resp({"articles": [_article("Gold up", seen="garbage")]}))
+    _mock(monkeypatch, _Resp({"articles": [_article("Gold climbs on Fed rate-cut bets", seen="garbage")]}))
     out = news.fetch_headlines()
     assert len(out) == 1 and out[0]["seen"] is None
 
 
 def test_empty_titles_are_dropped(monkeypatch):
     _mock(monkeypatch, _Resp({"articles": [
-        _article(""), _article(None), _article("Gold steady"),
+        _article(""), _article(None), _article("Gold steady ahead of US inflation data"),
     ]}))
-    assert [h["title"] for h in news.fetch_headlines()] == ["Gold steady"]
+    assert [h["title"] for h in news.fetch_headlines()] == ["Gold steady ahead of US inflation data"]
 
 
 # ── Escaping: headlines are untrusted third-party text ──────────
@@ -104,7 +104,7 @@ def test_titles_are_html_escaped(monkeypatch):
 
 def test_urls_are_escaped_in_the_block(monkeypatch):
     _mock(monkeypatch, _Resp({"articles": [
-        _article("Gold up", url='https://x/?a=1&b="2"'),
+        _article("Gold climbs on Fed rate-cut bets", url='https://x/?a=1&b="2"'),
     ]}))
     block = news.format_block(news.fetch_headlines(), "en")
     assert '&amp;b=' in block
@@ -112,7 +112,7 @@ def test_urls_are_escaped_in_the_block(monkeypatch):
 
 
 def test_domain_is_escaped(monkeypatch):
-    _mock(monkeypatch, _Resp({"articles": [_article("Gold up", domain="a<b>.com")]}))
+    _mock(monkeypatch, _Resp({"articles": [_article("Gold climbs on Fed rate-cut bets", domain="a<b>.com")]}))
     block = news.format_block(news.fetch_headlines(), "en")
     # The header legitimately contains <b>; check the domain itself was escaped.
     assert "a&lt;b&gt;.com" in block
@@ -134,7 +134,7 @@ def test_syndicated_copies_are_deduped(monkeypatch):
         _article("Gold rallies as Fed holds rates", domain="reuters.com"),
         _article("Gold rallies as Fed holds rates!", domain="cnbc.com"),
         _article("Gold rallies as Fed holds rates", domain="ft.com"),
-        _article("Something entirely different"),
+        _article("Silver outpaces gold in industrial demand"),
     ]}))
     out = news.fetch_headlines(limit=10)
     assert len(out) == 2
@@ -158,7 +158,7 @@ def test_relevance_is_ordering_not_sentiment():
 
 def test_limit_is_respected(monkeypatch):
     _mock(monkeypatch, _Resp({"articles": [
-        _article(f"Gold story number {i}") for i in range(20)
+        _article(f"Gold market moves on inflation data, story {i}") for i in range(20)
     ]}))
     assert len(news.fetch_headlines(limit=3)) == 3
 
@@ -170,13 +170,13 @@ def test_format_block_empty_for_no_headlines():
 
 
 def test_format_block_carries_the_disclaimer(monkeypatch):
-    _mock(monkeypatch, _Resp({"articles": [_article("Gold steady")]}))
+    _mock(monkeypatch, _Resp({"articles": [_article("Gold steady ahead of US inflation data")]}))
     block = news.format_block(news.fetch_headlines(), "en")
     assert "does not interpret" in block
 
 
 def test_format_block_localised(monkeypatch):
-    _mock(monkeypatch, _Resp({"articles": [_article("Gold steady")]}))
+    _mock(monkeypatch, _Resp({"articles": [_article("Gold steady ahead of US inflation data")]}))
     items = news.fetch_headlines()
     assert "พาดหัวข่าว" in news.format_block(items, "th")
     assert "သတင်းခေါင်းစဉ်" in news.format_block(items, "my")
@@ -227,7 +227,7 @@ def test_news_command_shows_headlines(monkeypatch):
     _MemStore(monkeypatch)
     sent = _capture(monkeypatch)
     monkeypatch.setattr(bot_core.news, "fetch_headlines",
-                        lambda *a, **k: [{"title": "Gold up on Fed pause",
+                        lambda *a, **k: [{"title": "Gold up on Fed pause, dollar softens",
                                           "url": "https://x/1",
                                           "domain": "reuters.com", "seen": None}])
     bot_core.cmd_news("111", "en")
@@ -369,7 +369,7 @@ def test_gdelt_not_used_when_google_succeeds(monkeypatch):
 def test_falls_back_to_gdelt_when_google_fails(monkeypatch):
     monkeypatch.setattr(news, "_fetch_google_news", lambda limit: [])
     monkeypatch.setattr(news, "_fetch_gdelt",
-                        lambda q, l, t: [{"title": "Gold up on Fed pause",
+                        lambda q, l, t: [{"title": "Gold up on Fed pause, dollar softens",
                                           "url": "https://x/1", "domain": "reuters.com",
                                           "seen": None}])
     out = news.fetch_headlines(limit=3)
@@ -409,3 +409,56 @@ def test_rfc822_dates_are_parsed():
     assert dt is not None and dt.year == 2026 and dt.tzinfo is not None
     assert news._parse_rfc822("garbage") is None
     assert news._parse_rfc822("") is None
+
+
+# ── Noise filter, tuned against a live feed ─────────────────────
+#
+# Every string below was observed in a real Google News response for the gold
+# query, so these pin behaviour against actual data rather than invented cases.
+
+def test_filters_aggregator_label_stacks():
+    assert news.is_noise(
+        "Today Gold Price | Latest Gold Rate | 20-07 -2026 | "
+        "Gold Price Today Hyderabad | YOYO TV")
+
+
+def test_keeps_legitimate_titles_with_two_separators():
+    """A couple of pipes is normal formatting, not spam. The cut is ABOVE two."""
+    assert not news.is_noise(
+        "China gold market update: Strong official sector buying in July "
+        "| Post by Ray Jia | Insight")
+
+
+def test_pipe_threshold_boundary():
+    base = "Gold market analysis and outlook for the coming quarter"
+    assert not news.is_noise(f"{base} | a | b")
+    assert news.is_noise(f"{base} | a | b | c")
+
+
+def test_filters_bare_section_labels():
+    """Feeds carry non-headline entries like 'Videos'."""
+    assert news.is_noise("Videos")
+    assert news.is_noise("")
+    assert news.is_noise("Gold up")
+
+
+def test_filters_regional_rate_listings():
+    for t in [
+        "Gold Rate Today in India: 24K Gold Falls to Rs 15,289 Per Gram",
+        "Gold Price Today in Cuttack - 18K, 22K & 24K Rate | 14 August 2026",
+        "Gold Rate Today In Prayagraj, Check Live 22 And 24 Carat Gold Price",
+        "Gold price in Saudi Arabia: Rates on August 14",
+        "Gold Price Today on August 14, 2026",
+    ]:
+        assert news.is_noise(t), f"should have been filtered: {t}"
+
+
+def test_keeps_real_market_coverage():
+    for t in [
+        "Gold steadies from two-month peak as inflation-led rally loses steam",
+        "UBS sees gold price challenging $5,000/oz in H1 2027 on lower real rates",
+        "Gold Price Pulls Back as Traders Reassess Fed Outlook",
+        "Spot gold approaches $4,400/oz after U.S. weekly jobless claims rise",
+        "Indonesia's Bullion Banks Now Manage 153 Tons of Gold Worth $20 Billion",
+    ]:
+        assert not news.is_noise(t), f"should have been kept: {t}"
