@@ -128,18 +128,19 @@ def test_level_alert_limit(monkeypatch):
 
 def test_level_alert_trigger_one_shot(monkeypatch):
     _MemStore(monkeypatch)
-    storage.add_level_alert("111", "above", 4500)
-    storage.add_level_alert("222", "below", 4200)
+    storage.add_level_alert("111", "above", 2500)
+    storage.add_level_alert("222", "below", 2200)
     storage.add_level_alert("333", "above", 9999)
 
-    fired = storage.pop_triggered_alerts(4600.0)  # crosses 111's above-4500
-    assert [(cid, a["price"]) for cid, a in fired] == [("111", 4500)]
+    # Alerts are USD/oz, so the THB price must not decide them.
+    fired = storage.pop_triggered_alerts(4600.0, 2600.0)  # crosses 111's above-2500
+    assert [(cid, a["price"]) for cid, a in fired] == [("111", 2500)]
     # one-shot: gone after firing; others survive
     assert storage.get_user_alerts("111") == []
     assert len(storage.get_user_alerts("222")) == 1
     assert len(storage.get_user_alerts("333")) == 1
 
-    fired = storage.pop_triggered_alerts(4100.0)  # crosses 222's below-4200
+    fired = storage.pop_triggered_alerts(4100.0, 2100.0)  # crosses 222's below-2200
     assert [cid for cid, _ in fired] == ["222"]
 
 

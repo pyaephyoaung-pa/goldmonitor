@@ -18,6 +18,35 @@ def fmt(n) -> str:
     return f"฿{n:,.0f}"
 
 
+def fmt_usd(n) -> str:
+    """Format a USD amount: 3352.409 -> '$3,352.41'.
+
+    Two decimals, unlike THB: a dollar move that matters to gold is often
+    smaller than a whole dollar per ounce.
+    """
+    return f"${n:,.2f}"
+
+
+def fmt_target(price, unit: str) -> str:
+    """Render a level-alert target in the unit it was set in.
+
+    /alert takes USD/oz. Records written before that switch carry no unit and
+    are still THB/gram — see storage.alert_unit.
+    """
+    return f"{fmt_usd(price)}/oz" if unit == "usd" else f"{fmt(price)}/g"
+
+
+def usd_oz_suffix(usd_oz) -> str:
+    """Format spot as ' | $3,352.41/oz', to sit next to a THB/gram figure.
+
+    Every place that shows a live THB/gram price also shows the USD/oz price it
+    was derived from, so a move can be read as gold moving vs the baht moving.
+    Returns '' when spot is unknown (older history entries have no `usd_oz`),
+    which lets callers append it unconditionally.
+    """
+    return f" | {fmt_usd(usd_oz)}/oz" if usd_oz else ""
+
+
 def gold_breakdown(thb_gram_9999: float) -> dict:
     """Calculate gold prices for 99.99% (pure) and 96.50% (jewelry) purity.
 

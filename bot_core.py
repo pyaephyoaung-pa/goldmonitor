@@ -30,7 +30,7 @@ import predictor
 import regime
 import goldapi
 import signals
-from gold_format import fmt, gold_breakdown
+from gold_format import fmt, fmt_target, fmt_usd, gold_breakdown, usd_oz_suffix
 
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -348,7 +348,7 @@ def cmd_price(chat_id: str, lang: str):
         i18n.t("price.baht_weight", lang, value=fmt(gb["baht_9650"])),
         i18n.t("price.per_gram", lang, value=fmt(gb["gram_9650"])),
         "━━━━━━━━━━━━━━━",
-        i18n.t("price.spot", lang, value=usd_oz),
+        i18n.t("price.spot", lang, value=fmt_usd(usd_oz)),
         i18n.t("price.rate", lang, value=thb_rate),
     ]
 
@@ -484,11 +484,13 @@ def cmd_chart(chat_id: str, args: str, lang: str):
         send_message(i18n.t("chart.unavailable", lang), chat_id)
         return
 
-    prices = [p["thb_gram"] for p in chart_points(history, days)]
+    points = chart_points(history, days)
+    prices = [p["thb_gram"] for p in points]
     change = ((prices[-1] - prices[0]) / prices[0]) * 100 if prices[0] else 0
     caption = i18n.t(
         "chart.caption", lang,
-        days=days, now=fmt(prices[-1]), arrow="📈" if change >= 0 else "📉",
+        days=days, now=fmt(prices[-1]), usd=usd_oz_suffix(points[-1].get("usd_oz")),
+        arrow="📈" if change >= 0 else "📉",
         change=change, high=fmt(max(prices)), low=fmt(min(prices)),
     )
     resp = send_photo(url, caption, chat_id)
@@ -708,7 +710,7 @@ def cmd_delete(chat_id: str, args: str, lang: str):
 
 
 def cmd_portfolio(chat_id: str, lang: str):
-    thb_gram, _, _ = goldapi.get_gold_price()
+    thb_gram, usd_oz, _ = goldapi.get_gold_price()
     if thb_gram is None:
         send_message(i18n.t("err.price_fetch_short", lang), chat_id)
         return
@@ -726,7 +728,8 @@ def cmd_portfolio(chat_id: str, lang: str):
         i18n.t("portfolio.invested", lang, value=fmt(pnl["total_invested"])),
         i18n.t("portfolio.holdings", lang, grams=pnl["total_grams"]),
         i18n.t("portfolio.avg_cost", lang, value=fmt(pnl["avg_cost"])),
-        i18n.t("portfolio.current_price", lang, value=fmt(pnl["current_price"])),
+        i18n.t("portfolio.current_price", lang, value=fmt(pnl["current_price"]),
+               usd=usd_oz_suffix(usd_oz)),
         "━━━━━━━━━━━━━━━",
         i18n.t("portfolio.current_value", lang, value=fmt(pnl["current_value"])),
     ]
@@ -791,8 +794,10 @@ def cmd_history(chat_id: str, args: str, lang: str):
         high, low, close, opn = max(p), min(p), p[-1], p[0]
         change = ((close - opn) / opn) * 100
         arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+        # usd_oz is 0 for pre-v2 entries that predate the field — the suffix
+        # falls away rather than printing "$0/oz".
         lines.append(
-            f"{arrow} {date}: {fmt(close)} "
+            f"{arrow} {date}: {fmt(close)}{usd_oz_suffix(daily[date]['usd'][-1])} "
             f"(H:{fmt(high)} L:{fmt(low)} {change:+.2f}%)"
         )
 
@@ -846,7 +851,7 @@ def cmd_setrisethreshold(chat_id: str, args: str, lang: str):
 # ── Price-level alerts ──────────────────────────────────────────
 
 def cmd_alert(chat_id: str, args: str, lang: str):
-    """/alert above 4500  |  /alert below 4200 — one-shot price-level alert."""
+    """/alert above 3500 | /alert below 3200 — one-shot alert on USD/oz spot."""
     parts = args.strip().lower().split()
     if len(parts) != 2 or parts[0] not in ("above", "below"):
         send_message(i18n.t("alert.usage", lang), chat_id)
@@ -860,15 +865,15 @@ def cmd_alert(chat_id: str, args: str, lang: str):
         send_message(i18n.t("alert.price_positive", lang), chat_id)
         return
 
-    # Sanity check against the current price so "above" alerts below market
+    # Sanity check against the current spot so "above" alerts below market
     # (which would fire instantly) are rejected with a helpful message.
-    thb_gram, _, _ = goldapi.get_gold_price()
-    if thb_gram is not None:
-        if parts[0] == "above" and price <= thb_gram:
-            send_message(i18n.t("alert.must_be_above", lang, price=fmt(thb_gram)), chat_id)
+    _, usd_oz, _ = goldapi.get_gold_price()
+    if usd_oz is not None:
+        if parts[0] == "above" and price <= usd_oz:
+            send_message(i18n.t("alert.must_be_above", lang, price=fmt_usd(usd_oz)), chat_id)
             return
-        if parts[0] == "below" and price >= thb_gram:
-            send_message(i18n.t("alert.must_be_below", lang, price=fmt(thb_gram)), chat_id)
+        if parts[0] == "below" and price >= usd_oz:
+            send_message(i18n.t("alert.must_be_below", lang, price=fmt_usd(usd_oz)), chat_id)
             return
 
     if not storage.add_level_alert(chat_id, parts[0], price):
@@ -876,7 +881,7 @@ def cmd_alert(chat_id: str, args: str, lang: str):
         return
 
     key = "alert.ok_above" if parts[0] == "above" else "alert.ok_below"
-    send_message(i18n.t(key, lang, price=fmt(price)), chat_id)
+    send_message(i18n.t(key, lang, price=fmt_usd(price)), chat_id)
 
 
 def cmd_alerts(chat_id: str, lang: str):
@@ -887,7 +892,8 @@ def cmd_alerts(chat_id: str, lang: str):
     lines = [i18n.t("alerts.header", lang), "━━━━━━━━━━━━━━━"]
     for i, a in enumerate(alerts, 1):
         arrow = "⬆️" if a["dir"] == "above" else "⬇️"
-        lines.append(f"  #{i} {arrow} {a['dir']} {fmt(a['price'])}/g")
+        lines.append(f"  #{i} {arrow} {a['dir']} "
+                     f"{fmt_target(a['price'], storage.alert_unit(a))}")
     lines.append("━━━━━━━━━━━━━━━")
     lines.append(i18n.t("alerts.delete_hint", lang))
     send_message("\n".join(lines), chat_id)
@@ -904,7 +910,8 @@ def cmd_delalert(chat_id: str, args: str, lang: str):
         send_message(i18n.t("delalert.not_found", lang, index=index), chat_id)
         return
     send_message(i18n.t("delalert.ok", lang, dir=removed["dir"],
-                        price=fmt(removed["price"])), chat_id)
+                        price=fmt_target(removed["price"],
+                                         storage.alert_unit(removed))), chat_id)
 
 
 def cmd_subscribe(chat_id: str, lang: str):

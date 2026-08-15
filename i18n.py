@@ -118,9 +118,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "  1 กรัม: {value}",
     },
     "price.spot": {
-        "en": "🌐 USD : ${value}/oz",
-        "my": "🌐 USD : ${value}/oz",
-        "th": "🌐 USD : ${value}/oz",
+        "en": "🌐 USD : {value}/oz",
+        "my": "🌐 USD : {value}/oz",
+        "th": "🌐 USD : {value}/oz",
     },
     "price.rate": {
         "en": "💱 Rate: 1 USD = {value} THB",
@@ -215,13 +215,13 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "chart.caption": {
         "en": ("📊 <b>Gold Price {days}-Day Chart</b>\n"
-               "💰 Now: {now}/g | {arrow} {change:+.2f}%\n"
+               "💰 Now: {now}/g{usd} | {arrow} {change:+.2f}%\n"
                "⬆️ High: {high} | ⬇️ Low: {low}"),
         "my": ("📊 <b>ရွှေဈေး {days}-Day Chart</b>\n"
-               "💰 Now: {now}/g | {arrow} {change:+.2f}%\n"
+               "💰 Now: {now}/g{usd} | {arrow} {change:+.2f}%\n"
                "⬆️ High: {high} | ⬇️ Low: {low}"),
         "th": ("📊 <b>กราฟราคาทอง {days} วัน</b>\n"
-               "💰 ตอนนี้: {now}/g | {arrow} {change:+.2f}%\n"
+               "💰 ตอนนี้: {now}/g{usd} | {arrow} {change:+.2f}%\n"
                "⬆️ สูงสุด: {high} | ⬇️ ต่ำสุด: {low}"),
     },
 
@@ -435,9 +435,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "📈 ต้นทุนเฉลี่ย: {value}/กรัม",
     },
     "portfolio.current_price": {
-        "en": "💰 Current price: {value}/gram",
-        "my": "💰 Current price: {value}/gram",
-        "th": "💰 ราคาปัจจุบัน: {value}/กรัม",
+        "en": "💰 Current price: {value}/gram{usd}",
+        "my": "💰 Current price: {value}/gram{usd}",
+        "th": "💰 ราคาปัจจุบัน: {value}/กรัม{usd}",
     },
     "portfolio.current_value": {
         "en": "💎 Current value: {value}",
@@ -513,17 +513,17 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # ── /alert, /alerts, /delalert ──────────────────────────────
     "alert.usage": {
-        "en": ("📝 Usage:\n"
-               "<code>/alert above 4500</code> — tell me when the price reaches 4500\n"
-               "<code>/alert below 4200</code> — tell me when it drops under 4200\n"
+        "en": ("📝 Usage — targets are USD per ounce:\n"
+               "<code>/alert above 3500</code> — tell me when spot reaches $3,500/oz\n"
+               "<code>/alert below 3200</code> — tell me when it drops under $3,200/oz\n"
                "📋 /alerts — see the alerts you have set"),
-        "my": ("📝 Usage:\n"
-               "<code>/alert above 4500</code> — ဈေး 4500 ရောက်ရင် အကြောင်းကြားပါ\n"
-               "<code>/alert below 4200</code> — ဈေး 4200 အောက်ကျရင် အကြောင်းကြားပါ\n"
+        "my": ("📝 Usage — target က USD/oz ဖြစ်ပါသည်:\n"
+               "<code>/alert above 3500</code> — spot $3,500/oz ရောက်ရင် အကြောင်းကြားပါ\n"
+               "<code>/alert below 3200</code> — spot $3,200/oz အောက်ကျရင် အကြောင်းကြားပါ\n"
                "📋 /alerts — သတ်မှတ်ထားသော alerts ကြည့်ပါ"),
-        "th": ("📝 วิธีใช้:\n"
-               "<code>/alert above 4500</code> — แจ้งเมื่อราคาถึง 4500\n"
-               "<code>/alert below 4200</code> — แจ้งเมื่อราคาต่ำกว่า 4200\n"
+        "th": ("📝 วิธีใช้ — ตั้งเป็น USD ต่อออนซ์:\n"
+               "<code>/alert above 3500</code> — แจ้งเมื่อ spot ถึง $3,500/oz\n"
+               "<code>/alert below 3200</code> — แจ้งเมื่อ spot ต่ำกว่า $3,200/oz\n"
                "📋 /alerts — ดูการแจ้งเตือนที่ตั้งไว้"),
     },
     "alert.price_positive": {
@@ -532,14 +532,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "⚠️ ราคาต้องมากกว่า 0",
     },
     "alert.must_be_above": {
-        "en": "⚠️ Must be higher than the current price {price} (above alert)",
-        "my": "⚠️ လက်ရှိဈေး {price} ထက် မြင့်ရပါမည် (above alert)",
-        "th": "⚠️ ต้องสูงกว่าราคาปัจจุบัน {price} (above alert)",
+        "en": "⚠️ Must be higher than the current spot {price}/oz (above alert)",
+        "my": "⚠️ လက်ရှိ spot {price}/oz ထက် မြင့်ရပါမည် (above alert)",
+        "th": "⚠️ ต้องสูงกว่า spot ปัจจุบัน {price}/oz (above alert)",
     },
     "alert.must_be_below": {
-        "en": "⚠️ Must be lower than the current price {price} (below alert)",
-        "my": "⚠️ လက်ရှိဈေး {price} ထက် နိမ့်ရပါမည် (below alert)",
-        "th": "⚠️ ต้องต่ำกว่าราคาปัจจุบัน {price} (below alert)",
+        "en": "⚠️ Must be lower than the current spot {price}/oz (below alert)",
+        "my": "⚠️ လက်ရှိ spot {price}/oz ထက် နိမ့်ရပါမည် (below alert)",
+        "th": "⚠️ ต้องต่ำกว่า spot ปัจจุบัน {price}/oz (below alert)",
     },
     "alert.limit": {
         "en": "⚠️ You can have at most {max} alerts — remove one with /delalert first",
@@ -548,33 +548,33 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "alert.ok_above": {
         "en": ("✅ <b>Alert set!</b>\n"
-               "⬆️ I will tell you when the price reaches {price}/g\n"
+               "⬆️ I will tell you when spot reaches {price}/oz\n"
                "ℹ️ One-shot — it is removed automatically after it fires"),
         "my": ("✅ <b>Alert သတ်မှတ်ပြီး!</b>\n"
-               "⬆️ ဈေး {price}/g ရောက်ရင် အကြောင်းကြားပါမည်\n"
+               "⬆️ Spot {price}/oz ရောက်ရင် အကြောင်းကြားပါမည်\n"
                "ℹ️ တစ်ကြိမ်သာ — fire ပြီးရင် auto ဖျက်ပါမည်"),
         "th": ("✅ <b>ตั้งการแจ้งเตือนแล้ว!</b>\n"
-               "⬆️ จะแจ้งเมื่อราคาถึง {price}/g\n"
+               "⬆️ จะแจ้งเมื่อ spot ถึง {price}/oz\n"
                "ℹ️ ครั้งเดียว — จะถูกลบอัตโนมัติหลังแจ้ง"),
     },
     "alert.ok_below": {
         "en": ("✅ <b>Alert set!</b>\n"
-               "⬇️ I will tell you when the price drops under {price}/g\n"
+               "⬇️ I will tell you when spot drops under {price}/oz\n"
                "ℹ️ One-shot — it is removed automatically after it fires"),
         "my": ("✅ <b>Alert သတ်မှတ်ပြီး!</b>\n"
-               "⬇️ ဈေး {price}/g အောက်ကျရင် အကြောင်းကြားပါမည်\n"
+               "⬇️ Spot {price}/oz အောက်ကျရင် အကြောင်းကြားပါမည်\n"
                "ℹ️ တစ်ကြိမ်သာ — fire ပြီးရင် auto ဖျက်ပါမည်"),
         "th": ("✅ <b>ตั้งการแจ้งเตือนแล้ว!</b>\n"
-               "⬇️ จะแจ้งเมื่อราคาต่ำกว่า {price}/g\n"
+               "⬇️ จะแจ้งเมื่อ spot ต่ำกว่า {price}/oz\n"
                "ℹ️ ครั้งเดียว — จะถูกลบอัตโนมัติหลังแจ้ง"),
     },
     "alerts.empty": {
         "en": ("📂 No alerts yet\n"
-               "Use: <code>/alert above 4500</code> or <code>/alert below 4200</code>"),
+               "Use: <code>/alert above 3500</code> or <code>/alert below 3200</code>"),
         "my": ("📂 Alert မရှိသေးပါ\n"
-               "Use: <code>/alert above 4500</code> or <code>/alert below 4200</code>"),
+               "Use: <code>/alert above 3500</code> or <code>/alert below 3200</code>"),
         "th": ("📂 ยังไม่มีการแจ้งเตือน\n"
-               "ใช้: <code>/alert above 4500</code> หรือ <code>/alert below 4200</code>"),
+               "ใช้: <code>/alert above 3500</code> หรือ <code>/alert below 3200</code>"),
     },
     "alerts.header": {
         "en": "🎯 <b>Your Price Alerts</b>",
@@ -597,9 +597,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "⚠️ ไม่พบการแจ้งเตือน #{index} — ดูที่ /alerts",
     },
     "delalert.ok": {
-        "en": "🗑 Alert removed: {dir} {price}/g",
-        "my": "🗑 Alert ဖျက်ပြီး: {dir} {price}/g",
-        "th": "🗑 ลบการแจ้งเตือนแล้ว: {dir} {price}/g",
+        "en": "🗑 Alert removed: {dir} {price}",
+        "my": "🗑 Alert ဖျက်ပြီး: {dir} {price}",
+        "th": "🗑 ลบการแจ้งเตือนแล้ว: {dir} {price}",
     },
 
     # ── /subscribe and /unsubscribe ─────────────────────────────
@@ -769,7 +769,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "💰 /price — current gold price\n"
                "🔮 /predict — 4h/12h/24h outlook\n"
                "📊 /chart [N] — N-day price chart (default 7)\n"
-               "🎯 /alert above|below &lt;THB&gt; — alert me at a price\n"
+               "🎯 /alert above|below &lt;USD/oz&gt; — alert me at a spot level\n"
                "📋 /alerts — your alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
                "📅 /events — upcoming FOMC / CPI / NFP releases\n"
@@ -794,7 +794,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "💰 /price — လက်ရှိ ရွှေဈေး\n"
                "🔮 /predict — 4h/12h/24h ခန့်မှန်းချက်\n"
                "📊 /chart [N] — N-day ဈေး chart (default 7)\n"
-               "🎯 /alert above|below &lt;THB&gt; — ဈေးရောက်ရင် အကြောင်းကြားပါ\n"
+               "🎯 /alert above|below &lt;USD/oz&gt; — spot ရောက်ရင် အကြောင်းကြားပါ\n"
                "📋 /alerts — သင့် alerts | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + fear score\n"
                "📅 /events — လာမည့် FOMC / CPI / NFP ကြေညာချက်များ\n"
@@ -819,7 +819,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "💰 /price — ราคาทองปัจจุบัน\n"
                "🔮 /predict — แนวโน้ม 4h/12h/24h\n"
                "📊 /chart [N] — กราฟราคา N วัน (ค่าเริ่มต้น 7)\n"
-               "🎯 /alert above|below &lt;THB&gt; — แจ้งเตือนที่ราคาที่กำหนด\n"
+               "🎯 /alert above|below &lt;USD/oz&gt; — แจ้งเตือนที่ระดับ spot ที่กำหนด\n"
                "📋 /alerts — การแจ้งเตือนของคุณ | 🗑 /delalert &lt;#&gt;\n"
                "🌍 /macro — DXY / US10Y / VIX + คะแนนความกลัว\n"
                "📅 /events — FOMC / CPI / NFP ที่กำลังจะประกาศ\n"
@@ -1052,7 +1052,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "  1 baht: {baht_9650}\n"
                "  1g: {gram_9650}\n"
                "━━━━━━━━━━━━━━━\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "💱 Rate     : 1 USD = {thb_rate} THB\n"
                "⚙️ Alert    : ↓{drop}% drop | ↑{rise}% rise"
                "{extras}\n"
@@ -1068,7 +1068,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "  ဘတ်သား: {baht_9650}\n"
                "  1g: {gram_9650}\n"
                "━━━━━━━━━━━━━━━\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "💱 Rate     : 1 USD = {thb_rate} THB\n"
                "⚙️ Alert    : ↓{drop}% drop | ↑{rise}% rise"
                "{extras}\n"
@@ -1084,7 +1084,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "  1 บาททอง: {baht_9650}\n"
                "  1 กรัม: {gram_9650}\n"
                "━━━━━━━━━━━━━━━\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "💱 อัตรา    : 1 USD = {thb_rate} THB\n"
                "⚙️ แจ้งเตือน : ↓{drop}% ลง | ↑{rise}% ขึ้น"
                "{extras}\n"
@@ -1111,7 +1111,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 Now     : {price}/g\n"
-               "🌐 Spot    : ${usd_oz}/oz\n"
+               "🌐 Spot    : {usd_oz}/oz\n"
                "📈 Open    : {open}/g\n"
                "📉 Drop    : {pct:.2f}% (Level {level})\n"
                "⬇️ Day Low : {low}/g"
@@ -1123,7 +1123,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 လက်ရှိ  : {price}/g\n"
-               "🌐 Spot    : ${usd_oz}/oz\n"
+               "🌐 Spot    : {usd_oz}/oz\n"
                "📈 Open    : {open}/g\n"
                "📉 ကျဆင်းမှု : {pct:.2f}% (Level {level})\n"
                "⬇️ ယနေ့ Low: {low}/g"
@@ -1135,7 +1135,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 ตอนนี้   : {price}/g\n"
-               "🌐 Spot    : ${usd_oz}/oz\n"
+               "🌐 Spot    : {usd_oz}/oz\n"
                "📈 เปิด     : {open}/g\n"
                "📉 ลดลง    : {pct:.2f}% (ระดับ {level})\n"
                "⬇️ ต่ำสุดวันนี้: {low}/g"
@@ -1149,7 +1149,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 Now      : {price}/g\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "📈 Open     : {open}/g\n"
                "🚀 Rise     : +{pct:.2f}% (Level {level})\n"
                "⬆️ Day High : {high}/g"
@@ -1160,7 +1160,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 လက်ရှိ  : {price}/g\n"
-               "🌐 Spot    : ${usd_oz}/oz\n"
+               "🌐 Spot    : {usd_oz}/oz\n"
                "📈 Open    : {open}/g\n"
                "🚀 တက်မှု   : +{pct:.2f}% (Level {level})\n"
                "⬆️ ယနေ့ High: {high}/g"
@@ -1171,7 +1171,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 ตอนนี้    : {price}/g\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "📈 เปิด      : {open}/g\n"
                "🚀 เพิ่มขึ้น  : +{pct:.2f}% (ระดับ {level})\n"
                "⬆️ สูงสุดวันนี้: {high}/g"
@@ -1184,7 +1184,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 Now         : {price}/g\n"
-               "🌐 Spot        : ${usd_oz}/oz\n"
+               "🌐 Spot        : {usd_oz}/oz\n"
                "📕 Prev close  : {prev_close}/g\n"
                "📉 Drop        : {pct:.2f}% (vs yesterday's close)\n"
                "⬇️ Day Low     : {low}/g"
@@ -1196,7 +1196,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 လက်ရှိ   : {price}/g\n"
-               "🌐 Spot     : ${usd_oz}/oz\n"
+               "🌐 Spot     : {usd_oz}/oz\n"
                "📕 မနေ့ပိတ် : {prev_close}/g\n"
                "📉 ကျဆင်းမှု : {pct:.2f}% (မနေ့ပိတ်ဈေးနှင့်)\n"
                "⬇️ ယနေ့ Low : {low}/g"
@@ -1208,7 +1208,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
                "💰 ตอนนี้      : {price}/g\n"
-               "🌐 Spot       : ${usd_oz}/oz\n"
+               "🌐 Spot       : {usd_oz}/oz\n"
                "📕 ปิดเมื่อวาน : {prev_close}/g\n"
                "📉 ลดลง       : {pct:.2f}% (เทียบราคาปิดเมื่อวาน)\n"
                "⬇️ ต่ำสุดวันนี้ : {low}/g"
@@ -1226,7 +1226,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "{arrow} Today       : {change:+.2f}%\n"
                "⬆️ Day High  : {high}/g\n"
                "⬇️ Day Low   : {low}/g\n"
-               "🌐 Spot: ${usd_oz}/oz"
+               "🌐 Spot: {usd_oz}/oz"
                "{extras}\n"
                "━━━━━━━━━━━━━━━"),
         "my": ("🌙 <b>ညနေ ရွှေဈေး အနှစ်ချုပ်</b>\n"
@@ -1237,7 +1237,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "{arrow} ယနေ့ change : {change:+.2f}%\n"
                "⬆️ Day High  : {high}/g\n"
                "⬇️ Day Low   : {low}/g\n"
-               "🌐 Spot: ${usd_oz}/oz"
+               "🌐 Spot: {usd_oz}/oz"
                "{extras}\n"
                "━━━━━━━━━━━━━━━"),
         "th": ("🌙 <b>สรุปราคาทองตอนเย็น</b>\n"
@@ -1248,7 +1248,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "{arrow} วันนี้        : {change:+.2f}%\n"
                "⬆️ สูงสุดวันนี้ : {high}/g\n"
                "⬇️ ต่ำสุดวันนี้ : {low}/g\n"
-               "🌐 Spot: ${usd_oz}/oz"
+               "🌐 Spot: {usd_oz}/oz"
                "{extras}\n"
                "━━━━━━━━━━━━━━━"),
     },
@@ -1287,37 +1287,40 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": ("🎯 <b>Price Alert Hit!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
-               "{arrow} Target : {dir} {target}/g\n"
+               "{arrow} Target : {dir} {target}\n"
                "💰 Now    : {price}/g\n"
+               "🌐 Spot   : {usd_oz}/oz\n"
                "━━━━━━━━━━━━━━━\n"
                "ℹ️ This alert was removed automatically — set a new one with /alert"),
         "my": ("🎯 <b>Price Alert ထိပြီ!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
-               "{arrow} သတ်မှတ်ချက်: {dir} {target}/g\n"
+               "{arrow} သတ်မှတ်ချက်: {dir} {target}\n"
                "💰 လက်ရှိဈေး : {price}/g\n"
+               "🌐 Spot      : {usd_oz}/oz\n"
                "━━━━━━━━━━━━━━━\n"
                "ℹ️ ဤ alert ကို auto ဖျက်ပြီးပါပြီ — /alert ဖြင့် အသစ်သတ်မှတ်နိုင်ပါသည်"),
         "th": ("🎯 <b>ถึงราคาที่ตั้งไว้แล้ว!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
-               "{arrow} เป้าหมาย : {dir} {target}/g\n"
+               "{arrow} เป้าหมาย : {dir} {target}\n"
                "💰 ตอนนี้   : {price}/g\n"
+               "🌐 Spot    : {usd_oz}/oz\n"
                "━━━━━━━━━━━━━━━\n"
                "ℹ️ ลบการแจ้งเตือนนี้อัตโนมัติแล้ว — ตั้งใหม่ด้วย /alert"),
     },
     "monitor.weekly": {
-        "en": ("\n\n📅 <b>Weekly Recap (7d)</b>\n"
+        "en": ("\n\n📅 <b>Weekly Recap (7d, USD/oz)</b>\n"
                "  {arrow} Week: {change:+.2f}% ({open} → {close})\n"
                "  ⬆️ High: {high} | ⬇️ Low: {low}\n"
                "  🏆 Best day: {best_day} ({best:+.2f}%)\n"
                "  💔 Worst day: {worst_day} ({worst:+.2f}%)"),
-        "my": ("\n\n📅 <b>သီတင်းပတ် အနှစ်ချုပ် (7d)</b>\n"
+        "my": ("\n\n📅 <b>သီတင်းပတ် အနှစ်ချုပ် (7d, USD/oz)</b>\n"
                "  {arrow} Week: {change:+.2f}% ({open} → {close})\n"
                "  ⬆️ High: {high} | ⬇️ Low: {low}\n"
                "  🏆 Best day: {best_day} ({best:+.2f}%)\n"
                "  💔 Worst day: {worst_day} ({worst:+.2f}%)"),
-        "th": ("\n\n📅 <b>สรุปรายสัปดาห์ (7 วัน)</b>\n"
+        "th": ("\n\n📅 <b>สรุปรายสัปดาห์ (7 วัน, USD/oz)</b>\n"
                "  {arrow} สัปดาห์: {change:+.2f}% ({open} → {close})\n"
                "  ⬆️ สูงสุด: {high} | ⬇️ ต่ำสุด: {low}\n"
                "  🏆 วันที่ดีที่สุด: {best_day} ({best:+.2f}%)\n"

@@ -122,7 +122,8 @@ def _week_history():
     pts = []
     for i in range(168):
         t = now - timedelta(hours=167 - i)
-        pts.append({"ts": t.isoformat(), "thb_gram": 4000.0 + i * 0.5})
+        pts.append({"ts": t.isoformat(), "thb_gram": 4000.0 + i * 0.5,
+                    "usd_oz": 2400.0 + i * 0.25})
     return pts
 
 
@@ -135,7 +136,8 @@ def test_weekly_block_contents():
 
 def test_weekly_block_needs_data():
     assert gold_monitor.build_weekly_block([]) == ""
-    one_day = [{"ts": "2026-06-10T0%d:00:00+07:00" % i, "thb_gram": 4000.0}
+    one_day = [{"ts": "2026-06-10T0%d:00:00+07:00" % i, "thb_gram": 4000.0,
+                "usd_oz": 2400.0}
                for i in range(10)]
     assert gold_monitor.build_weekly_block(one_day) == ""
 
