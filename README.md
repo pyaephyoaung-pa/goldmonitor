@@ -31,7 +31,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/price` | 💰 Current gold price + quick TA |
 | `/predict` | 🔮 4h/12h/24h outlook + live hit-rate |
 | `/chart [N]` | 📊 N-day price chart image (default 7, max 30) |
-| `/alert above\|below <THB>` | 🎯 One-shot alert when a price level is hit (max 5) |
+| `/alert above\|below <USD/oz>` | 🎯 One-shot alert when spot hits a level (max 5) |
 | `/alerts` | 📋 List your price alerts |
 | `/delalert <#>` | 🗑 Delete a price alert |
 | `/history [N]` | 📈 N-day price history (default 7) |
@@ -544,7 +544,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/price` | 💰 လက်ရှိ ရွှေဈေး + quick TA |
 | `/predict` | 🔮 4h/12h/24h ခန့်မှန်းချက် + live hit-rate |
 | `/chart [N]` | 📊 N-day ဈေး chart ပုံ (default 7, max 30) |
-| `/alert above\|below <THB>` | 🎯 ဈေးအဆင့်ရောက်ရင် one-shot alert (max 5) |
+| `/alert above\|below <USD/oz>` | 🎯 Spot အဆင့်ရောက်ရင် one-shot alert (max 5) |
 | `/alerts` | 📋 သင့် price alerts စာရင်း |
 | `/delalert <#>` | 🗑 Price alert ဖျက်ပါ |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |

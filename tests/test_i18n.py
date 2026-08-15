@@ -306,7 +306,8 @@ def test_weekly_block_is_localised():
     bkk = pytz.timezone("Asia/Bangkok")
     now = datetime.now(bkk)
     hist = [{"ts": (now - timedelta(hours=167 - i)).isoformat(),
-             "thb_gram": 4000.0 + i * 0.5} for i in range(168)]
+             "thb_gram": 4000.0 + i * 0.5, "usd_oz": 2400.0 + i * 0.25}
+            for i in range(168)]
 
     en = gold_monitor.build_weekly_block(hist, "en")
     th = gold_monitor.build_weekly_block(hist, "th")

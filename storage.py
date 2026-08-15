@@ -553,7 +553,19 @@ def get_user_alerts(chat_id: str) -> list:
     return get_level_alerts().get(str(chat_id), [])
 
 
-def add_level_alert(chat_id: str, direction: str, price: float) -> bool:
+def alert_unit(alert: dict) -> str:
+    """Which price a level alert is measured against: 'usd' (per oz) or 'thb'.
+
+    /alert now takes USD/oz, but alerts stored before that switch have no
+    "unit" field and are still THB/gram. Reading them as USD would turn an
+    "above ฿4,500" target into an unreachable $4,500 one, and every "below"
+    target into an instant trigger — so an absent unit means THB, forever.
+    """
+    return alert.get("unit") or "thb"
+
+
+def add_level_alert(chat_id: str, direction: str, price: float,
+                    unit: str = "usd") -> bool:
     """Add a one-shot level alert. Returns False if user hit the limit."""
     alerts = get_level_alerts()
     user_alerts = alerts.get(str(chat_id), [])
@@ -562,6 +574,7 @@ def add_level_alert(chat_id: str, direction: str, price: float) -> bool:
     user_alerts.append({
         "dir": direction,
         "price": round(price, 2),
+        "unit": unit,
         "created": datetime.now(BANGKOK_TZ).isoformat(),
     })
     alerts[str(chat_id)] = user_alerts
@@ -584,19 +597,25 @@ def remove_level_alert(chat_id: str, index: int) -> dict | None:
     return removed
 
 
-def pop_triggered_alerts(current_price: float) -> list:
+def pop_triggered_alerts(thb_gram: float, usd_oz: float | None = None) -> list:
     """Return [(chat_id, alert), ...] whose level was crossed; remove them.
+
+    Each alert is compared against the price in its own unit (see alert_unit).
+    An alert whose unit has no price this run — or that stored no target — is
+    kept rather than fired, so a missing spot quote cannot empty the queue.
 
     One-shot semantics: a triggered alert fires once and is deleted.
     """
+    current = {"thb": thb_gram, "usd": usd_oz}
     alerts = get_level_alerts()
     triggered, remaining = [], {}
     for chat_id, user_alerts in alerts.items():
         keep = []
         for a in user_alerts:
-            crossed = (
-                (a.get("dir") == "above" and current_price >= a.get("price", 0)) or
-                (a.get("dir") == "below" and current_price <= a.get("price", 0))
+            price, target = current.get(alert_unit(a)), a.get("price")
+            crossed = price is not None and target is not None and (
+                (a.get("dir") == "above" and price >= target) or
+                (a.get("dir") == "below" and price <= target)
             )
             if crossed:
                 triggered.append((chat_id, a))

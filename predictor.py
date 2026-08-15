@@ -16,6 +16,7 @@ import pytz
 
 import events
 import i18n
+from gold_format import usd_oz_suffix
 
 # Training is scheduled against Bangkok wall-clock time, so `last_trained` must
 # be stamped in the same zone as the date the caller compares it to.
@@ -788,9 +789,9 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
 
     # Current price context
     if ta.get("current_price"):
-        usd_line = f" | ${prediction['usd_oz']}/oz" if prediction.get("usd_oz") else ""
         lines.append(i18n.t("predict.current", lang,
-                            price=ta["current_price"], usd=usd_line))
+                            price=ta["current_price"],
+                            usd=usd_oz_suffix(prediction.get("usd_oz"))))
 
     # RSI with visual bar
     if ta.get("rsi") is not None:

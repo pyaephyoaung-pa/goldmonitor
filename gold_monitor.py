@@ -30,7 +30,7 @@ import regime
 import goldapi
 import bot_core
 import signals
-from gold_format import fmt, gold_breakdown
+from gold_format import fmt, fmt_target, fmt_usd, gold_breakdown
 
 # ── Config ──────────────────────────────────────────────────────
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
@@ -127,9 +127,14 @@ def rise_pct(open_p, cur):
 def build_weekly_block(history: list, lang: str | None = None) -> str:
     """Weekly recap appended to the SUNDAY evening summary.
 
+    Quoted in USD/oz, not THB/gram: over a week the baht moves enough that a
+    THB recap blends two stories, and the daily rows in the summary above
+    already carry the THB side.
+
     Computed from the hourly price history: week change, range, and the
     best/worst day by daily close-over-open move. Returns "" if there is not
-    enough data (needs ≥ 2 distinct days in the last 7d window).
+    enough data (needs ≥ 2 distinct days of spot in the last 7d window —
+    entries from before usd_oz was recorded are skipped).
     """
     points = history[-168:]  # last 7 days of hourly points
     if len(points) < 24:
@@ -137,9 +142,9 @@ def build_weekly_block(history: list, lang: str | None = None) -> str:
 
     daily = {}
     for h in points:
-        if "thb_gram" not in h or "ts" not in h:
+        if not h.get("usd_oz") or "ts" not in h:
             continue
-        daily.setdefault(h["ts"][:10], []).append(h["thb_gram"])
+        daily.setdefault(h["ts"][:10], []).append(h["usd_oz"])
     if len(daily) < 2:
         return ""
 
@@ -157,8 +162,8 @@ def build_weekly_block(history: list, lang: str | None = None) -> str:
     return i18n.t(
         "monitor.weekly", lang,
         arrow="📈" if week_change >= 0 else "📉",
-        change=week_change, open=fmt(week_open), close=fmt(week_close),
-        high=fmt(max(prices)), low=fmt(min(prices)),
+        change=week_change, open=fmt_usd(week_open), close=fmt_usd(week_close),
+        high=fmt_usd(max(prices)), low=fmt_usd(min(prices)),
         best_day=best[5:], best=day_moves[best],
         worst_day=worst[5:], worst=day_moves[worst],
     )
@@ -281,7 +286,7 @@ def main():
                 "monitor.morning", lang, when=time_str,
                 baht_9999=fmt(gb["baht_9999"]), gram_9999=fmt(gb["gram_9999"]),
                 baht_9650=fmt(gb["baht_9650"]), gram_9650=fmt(gb["gram_9650"]),
-                usd_oz=usd_oz, thb_rate=thb_rate,
+                usd_oz=fmt_usd(usd_oz), thb_rate=thb_rate,
                 drop=DROP_THRESHOLD, rise=RISE_THRESHOLD, extras=extras,
             )
 
@@ -297,14 +302,15 @@ def main():
     print(f"  Drop from open: {d:+.2f}%")
 
     # ── Per-user Price-level Alerts (one-shot, set via /alert) ──
-    for chat_id, alert in storage.pop_triggered_alerts(thb_gram):
+    for chat_id, alert in storage.pop_triggered_alerts(thb_gram, usd_oz):
         # Level alerts go to one user each, in that user's own language.
         bot_core.send_message(
             i18n.t("monitor.level_alert", storage.get_user_lang(chat_id),
                    when=time_str,
                    arrow="⬆️" if alert["dir"] == "above" else "⬇️",
-                   dir=alert["dir"], target=fmt(alert["price"]),
-                   price=fmt(thb_gram)),
+                   dir=alert["dir"],
+                   target=fmt_target(alert["price"], storage.alert_unit(alert)),
+                   price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz)),
             chat_id,
         )
         print(f"  Level alert fired: {chat_id} {alert['dir']} {alert['price']}")
@@ -382,7 +388,7 @@ def main():
             notify(lambda lang, lv=level: i18n.t(
                 "monitor.drop", lang, emoji=lv["emoji"],
                 title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
-                price=fmt(thb_gram), usd_oz=usd_oz,
+                price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
                 open=fmt(state["open_price"]), pct=d, level=lv["mult"],
                 low=fmt(state["day_low"]), ta=ta_block(lang),
                 advice=i18n.t(f"{lv['str']}.advice", lang),
@@ -406,7 +412,7 @@ def main():
         if gap >= GAP_THRESHOLD:
             notify(lambda lang: i18n.t(
                 "monitor.gap", lang, when=time_str, price=fmt(thb_gram),
-                usd_oz=usd_oz, prev_close=fmt(prev_close), pct=gap,
+                usd_oz=fmt_usd(usd_oz), prev_close=fmt(prev_close), pct=gap,
                 low=fmt(state["day_low"]), ta=ta_block(lang),
             ))
             state["notified_gap"] = True
@@ -427,7 +433,7 @@ def main():
             notify(lambda lang, lv=level: i18n.t(
                 "monitor.rise", lang, emoji=lv["emoji"],
                 title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
-                price=fmt(thb_gram), usd_oz=usd_oz,
+                price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
                 open=fmt(state["open_price"]), pct=r, level=lv["mult"],
                 high=fmt(state["day_high"]), ta=ta_block(lang),
                 advice=i18n.t(f"{lv['str']}.advice", lang),
@@ -507,7 +513,7 @@ def main():
                 "monitor.evening", lang, when=time_str, price=fmt(thb_gram),
                 open=fmt(state["open_price"]), arrow=arrow, change=change,
                 high=fmt(state["day_high"]), low=fmt(state["day_low"]),
-                usd_oz=usd_oz, extras=extras,
+                usd_oz=fmt_usd(usd_oz), extras=extras,
             )
 
         notify(build_evening, "evening")

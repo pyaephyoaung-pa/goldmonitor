@@ -41,7 +41,7 @@ def harness(monkeypatch):
     # notify() reads subscribers and prefs together in one Gist round-trip.
     monkeypatch.setattr(storage, "get_subscribers_and_prefs", lambda: ([], {}))
     monkeypatch.setattr(storage, "prefs_allow", lambda prefs, cat, hour: True)
-    monkeypatch.setattr(storage, "pop_triggered_alerts", lambda price: [])
+    monkeypatch.setattr(storage, "pop_triggered_alerts", lambda *prices: [])
 
     sent = []
     monkeypatch.setattr(bot_core, "send_message",
