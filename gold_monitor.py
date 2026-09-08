@@ -522,9 +522,15 @@ def main():
     # Remember the latest price so tomorrow can detect an overnight gap.
     state["last_price"] = thb_gram
     if pending_model_data is not None:
-        storage.save_day_state_and_model(state, pending_model_data)
+        saved = storage.save_day_state_and_model(state, pending_model_data)
     else:
-        storage.save_day_state(state)
+        saved = storage.save_day_state(state)
+    if not saved:
+        # Every "already sent" flag lives in this file. If it did not land, the
+        # next run re-reads the old state and re-sends the same drop alert —
+        # once every five minutes until a write succeeds. Say so loudly; the
+        # write itself already logged the underlying cause.
+        print("  [WARN] day state NOT saved — alert flags may replay next run")
 
     # ── Train ML Model (once per day, after enough data) ────────
     if hour == 3 and len(history) >= 100:

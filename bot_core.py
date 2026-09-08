@@ -13,9 +13,11 @@ held its own ~400-line copy of these handlers, which drifted out of sync.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import time
+import traceback
 import html as html_module
 from datetime import datetime
 
@@ -322,6 +324,34 @@ def warn_owner_if_webhook_broken(bot_state: dict) -> bool:
         return False
 
 
+# ── User-supplied numbers ───────────────────────────────────────
+
+def parse_amount(raw) -> float | None:
+    """Parse a number typed by a user. None if it is not a FINITE number.
+
+    float() accepts "nan", "inf" and "1e400", and every range check that
+    follows then passes them through: `nan <= 0` and `nan > 10` are BOTH
+    False. The consequences are silent and permanent —
+
+      * /setthreshold nan  -> `d >= threshold` is never true again, so drop
+        and rise alerts stop firing with no error anywhere;
+      * /alert above nan   -> an alert that can never trigger, holding one of
+        the user's five slots for good;
+      * /bought inf        -> every portfolio figure becomes inf or nan;
+
+    and all three persist to the Gist as `NaN` / `Infinity`, which json.dumps
+    emits happily but is not valid JSON for anything else that reads the file.
+
+    Thousands separators are stripped so "5,000" works everywhere (/alert
+    already allowed it).
+    """
+    try:
+        val = float(str(raw).strip().replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return val if math.isfinite(val) else None
+
+
 # ── Command Handlers ────────────────────────────────────────────
 #
 # Every handler takes the caller's language as its last argument. dispatch_update
@@ -411,7 +441,7 @@ def chart_points(history: list, days: int) -> list:
     so any entry missing "thb_gram" made the two disagree about the window —
     and could leave the caption with an empty list to index.
     """
-    return [h for h in history if "thb_gram" in h][-days * 24:]
+    return predictor.priced_points(history)[-days * 24:]
 
 
 def build_chart_config(history: list, days: int) -> dict | None:
@@ -605,9 +635,8 @@ def cmd_news(chat_id: str, lang: str):
 
 
 def cmd_bought(chat_id: str, args: str, lang: str):
-    try:
-        amount = float(args.strip())
-    except (ValueError, AttributeError):
+    amount = parse_amount(args)
+    if amount is None:
         send_message(i18n.t("bought.usage", lang), chat_id)
         return
 
@@ -630,9 +659,8 @@ def cmd_bought(chat_id: str, args: str, lang: str):
 
 
 def cmd_sold(chat_id: str, args: str, lang: str):
-    try:
-        amount = float(args.strip())
-    except (ValueError, AttributeError):
+    amount = parse_amount(args)
+    if amount is None:
         send_message(i18n.t("sold.usage", lang), chat_id)
         return
 
@@ -664,10 +692,12 @@ def cmd_edit(chat_id: str, args: str, lang: str):
         send_message(i18n.t("edit.usage", lang), chat_id)
         return
 
+    new_amount = parse_amount(parts[1])
     try:
         index = int(parts[0])
-        new_amount = float(parts[1])
     except ValueError:
+        index = None
+    if index is None or new_amount is None:
         send_message(i18n.t("edit.numbers", lang), chat_id)
         return
 
@@ -779,12 +809,18 @@ def cmd_history(chat_id: str, args: str, lang: str):
         return
 
     daily = {}
-    for h in history:
+    for h in predictor.priced_points(history):
+        if not h.get("ts"):
+            continue
         date = h["ts"][:10]
         if date not in daily:
             daily[date] = {"prices": [], "usd": []}
         daily[date]["prices"].append(h["thb_gram"])
         daily[date]["usd"].append(h.get("usd_oz", 0))
+
+    if not daily:
+        send_message(i18n.t("err.not_enough_data", lang), chat_id)
+        return
 
     dates = sorted(daily.keys())[-days:]
     lines = [i18n.t("history.header", lang, days=len(dates)), "━━━━━━━━━━━━━━━"]
@@ -805,9 +841,8 @@ def cmd_history(chat_id: str, args: str, lang: str):
 
 
 def cmd_setthreshold(chat_id: str, args: str, lang: str):
-    try:
-        val = float(args.strip())
-    except (ValueError, AttributeError):
+    val = parse_amount(args)
+    if val is None:
         send_message(i18n.t("threshold.usage_drop", lang), chat_id)
         return
 
@@ -828,9 +863,8 @@ def cmd_setthreshold(chat_id: str, args: str, lang: str):
 
 
 def cmd_setrisethreshold(chat_id: str, args: str, lang: str):
-    try:
-        val = float(args.strip())
-    except (ValueError, AttributeError):
+    val = parse_amount(args)
+    if val is None:
         send_message(i18n.t("threshold.usage_rise", lang), chat_id)
         return
 
@@ -856,9 +890,8 @@ def cmd_alert(chat_id: str, args: str, lang: str):
     if len(parts) != 2 or parts[0] not in ("above", "below"):
         send_message(i18n.t("alert.usage", lang), chat_id)
         return
-    try:
-        price = float(parts[1].replace(",", ""))
-    except ValueError:
+    price = parse_amount(parts[1])
+    if price is None:
         send_message(i18n.t("alert.usage", lang), chat_id)
         return
     if price <= 0:
@@ -1152,6 +1185,15 @@ def dispatch_update(update: dict) -> bool:
     try:
         handler(chat_id, args, lang)
     except Exception as e:
-        print(f"[bot] Command error: {e}")
-        send_message(i18n.t("err.generic", lang, error=html_module.escape(str(e))), chat_id)
+        # The exception text is for the owner and the logs only. Anyone can
+        # talk to this bot, and a requests error carries the URL that raised
+        # it — for a storage failure that is the private Gist's id.
+        print(f"[bot] Command error: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        if is_owner:
+            send_message(i18n.t("err.generic", lang,
+                                error=html_module.escape(f"{type(e).__name__}: {e}")),
+                         chat_id)
+        else:
+            send_message(i18n.t("err.generic_short", lang), chat_id)
     return True

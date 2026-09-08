@@ -75,6 +75,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "⚠️ Error: {error}",
         "th": "⚠️ ข้อผิดพลาด: {error}",
     },
+    "err.generic_short": {
+        "en": "⚠️ Something went wrong — please try again shortly",
+        "my": "⚠️ တစ်ခုခု မှားယွင်းသွားပါသည် — ခဏနေ ပြန်စမ်းပါ",
+        "th": "⚠️ เกิดข้อผิดพลาด — ลองใหม่อีกสักครู่",
+    },
     "err.unknown_command": {
         "en": "❓ Unknown command: {cmd}\nType /help for available commands",
         "my": "❓ Unknown command: {cmd}\nType /help for available commands",
