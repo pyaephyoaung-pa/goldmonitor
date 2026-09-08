@@ -38,13 +38,27 @@ def process_commands():
         print("[bot] No new messages")
         return
 
+    # Commit the offset BEFORE dispatching anything, and only proceed if the
+    # write actually landed.
+    #
+    # Commands here have side effects that must not repeat: /bought writes a
+    # portfolio entry, /alert consumes a slot, /sold moves gold out. Saving the
+    # offset afterwards meant any interruption — the 3-minute workflow timeout,
+    # or a Gist write that failed and was swallowed — replayed the whole batch
+    # on the next poll, logging the same purchase twice. At-most-once is the
+    # right trade here: a dropped command is one the user can simply retype.
+    new_offset = max(u.get("update_id", -1) for u in updates) + 1
+    if new_offset > offset:
+        bot_state["update_offset"] = new_offset
+        if not storage.save_bot_state(bot_state):
+            print("[bot] Could not persist update_offset — skipping this batch "
+                  "rather than risking a replay of /bought, /sold or /alert")
+            return
+
     for update in updates:
         bot_core.dispatch_update(update)
-        offset = update["update_id"] + 1
 
-    bot_state["update_offset"] = offset
-    storage.save_bot_state(bot_state)
-    print(f"[bot] Processed {len(updates)} updates, new offset={offset}")
+    print(f"[bot] Processed {len(updates)} updates, new offset={new_offset}")
 
 
 if __name__ == "__main__":

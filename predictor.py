@@ -22,6 +22,22 @@ from gold_format import usd_oz_suffix
 # be stamped in the same zone as the date the caller compares it to.
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 
+# ── History hygiene ─────────────────────────────────────────────
+
+def priced_points(history: list) -> list:
+    """The history entries that actually carry a price.
+
+    Everything downstream indexes h["thb_gram"] directly, so a single
+    malformed or partially written row raises KeyError — inside the monitor's
+    five-minute loop, that is a red run and a crash alert every five minutes
+    until someone hand-edits the Gist. chart_points() and regime.vol_regime()
+    already filtered for exactly this; analyze(), get_trend_summary() and
+    /history did not. Filter once, here, and let every caller share it.
+    """
+    return [h for h in history
+            if isinstance(h, dict) and h.get("thb_gram") is not None]
+
+
 # ── Technical Indicators ────────────────────────────────────────
 
 def calc_rsi(prices: list, period: int = 14) -> float | None:
@@ -160,10 +176,10 @@ def analyze(history: list) -> dict:
     Returns:
         dict of all indicator values + interpretation
     """
-    if not history or len(history) < 5:
+    prices = [h["thb_gram"] for h in priced_points(history)]
+    if len(prices) < 5:
         return {"error": "Not enough data (need at least 5 data points)"}
 
-    prices = [h["thb_gram"] for h in history]
     current = prices[-1]
 
     result = {"current_price": current, "data_points": len(prices)}
@@ -656,6 +672,8 @@ def resolve_predictions(model_data: dict, history: list) -> bool:
     hist = []
     for h in history:
         try:
+            if h.get("thb_gram") is None:
+                continue
             hist.append((datetime.fromisoformat(h["ts"]), h["thb_gram"]))
         except (KeyError, ValueError, TypeError):
             continue
@@ -708,10 +726,10 @@ def prediction_hit_rates(model_data: dict) -> dict:
 
 def get_trend_summary(history: list) -> dict:
     """Compute multi-timeframe trend summary."""
-    if len(history) < 2:
+    prices = [h["thb_gram"] for h in priced_points(history)]
+    if len(prices) < 2:
         return {"error": "Not enough data"}
 
-    prices = [h["thb_gram"] for h in history]
     current = prices[-1]
 
     def pct_change(old, new):

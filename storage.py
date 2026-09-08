@@ -95,11 +95,17 @@ def _read_file(filename: str) -> dict | list:
     return {}
 
 
-def _write_file(filename: str, data):
-    """Write a single JSON file to the Gist."""
+def _write_file(filename: str, data) -> bool:
+    """Write a single JSON file to the Gist. True if it actually landed.
+
+    Callers that persist "this already happened" state MUST check the result.
+    A silently dropped write means the next run re-reads the old state and
+    repeats the side effect — a duplicate /bought entry, or the same drop
+    alert every five minutes.
+    """
     if not GITHUB_TOKEN or not GIST_ID:
         print(f"[storage] No Gist credentials — skipping write for {filename}")
-        return
+        return False
     try:
         r = requests.patch(
             f"https://api.github.com/gists/{GIST_ID}",
@@ -107,14 +113,16 @@ def _write_file(filename: str, data):
             json={"files": {filename: {"content": json.dumps(data, indent=2)}}},
         )
         r.raise_for_status()
+        return True
     except Exception as e:
         print(f"[storage] Gist write error ({filename}): {e}")
+        return False
 
 
-def _write_files(file_dict: dict):
-    """Write multiple files to the Gist in one API call."""
+def _write_files(file_dict: dict) -> bool:
+    """Write multiple files to the Gist in one API call. True if it landed."""
     if not GITHUB_TOKEN or not GIST_ID:
-        return
+        return False
     try:
         files_payload = {
             name: {"content": json.dumps(data, indent=2)}
@@ -126,8 +134,10 @@ def _write_files(file_dict: dict):
             json={"files": files_payload},
         )
         r.raise_for_status()
+        return True
     except Exception as e:
         print(f"[storage] Gist batch write error: {e}")
+        return False
 
 
 # ── Price History ───────────────────────────────────────────────
@@ -236,8 +246,8 @@ def load_day_state() -> dict:
     }
 
 
-def save_day_state(state: dict):
-    _write_file(DAY_STATE_FILE, state)
+def save_day_state(state: dict) -> bool:
+    return _write_file(DAY_STATE_FILE, state)
 
 
 # ── Buy/Sell Log & Portfolio ───────────────────────────────────
@@ -390,8 +400,8 @@ def load_bot_state() -> dict:
     return state or {"update_offset": 0, "drop_threshold": 0.5}
 
 
-def save_bot_state(state: dict):
-    _write_file(BOT_STATE_FILE, state)
+def save_bot_state(state: dict) -> bool:
+    return _write_file(BOT_STATE_FILE, state)
 
 
 # ── Model Data (stored predictions + training metadata) ────────
@@ -399,18 +409,18 @@ def load_model_data() -> dict:
     return _read_file(MODEL_DATA_FILE) or {"predictions": [], "last_trained": None}
 
 
-def save_model_data(data: dict):
-    _write_file(MODEL_DATA_FILE, data)
+def save_model_data(data: dict) -> bool:
+    return _write_file(MODEL_DATA_FILE, data)
 
 
-def save_day_state_and_model(state: dict, model_data: dict):
+def save_day_state_and_model(state: dict, model_data: dict) -> bool:
     """Persist day state + model data in ONE Gist PATCH.
 
     A monitor run otherwise issues a separate write per file (and per call),
     each a full authenticated round-trip that widens the read-modify-write race
     on the shared Gist.
     """
-    _write_files({DAY_STATE_FILE: state, MODEL_DATA_FILE: model_data})
+    return _write_files({DAY_STATE_FILE: state, MODEL_DATA_FILE: model_data})
 
 
 # ── Subscribers ────────────────────────────────────────────────
