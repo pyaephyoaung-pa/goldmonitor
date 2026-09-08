@@ -74,18 +74,81 @@ def _file_content(entry: dict) -> str | None:
         return None
 
 
-def _read_file(filename: str) -> dict | list:
+# ── Per-run cache ───────────────────────────────────────────────
+#
+# _get_gist downloads EVERY file in the Gist — the price history, the buy log
+# and the exported models all ride along on a read of bot_state.json. A single
+# monitor run did that 3-6 times, every five minutes, and a single /price does
+# it twice (once to resolve the user's language, once for the history).
+#
+# So the fetched files are cached for the length of one logical run. Three
+# rules keep that honest:
+#
+#   1. A failed or empty fetch is never cached. Caching it would make every
+#      later read in the run see "no data", and a caller that then wrote would
+#      persist that emptiness over real data — the exact failure _read_file's
+#      docstring warns about.
+#   2. Writes update the cache in place, and only when they actually landed,
+#      so a read after a write sees what was written and never resurrects the
+#      pre-write copy.
+#   3. append_price re-reads with fresh=True. That pre-write re-read exists to
+#      pick up a CONCURRENT run's appends; serving it from our own cache would
+#      quietly remove the guard.
+#
+# The cron entrypoints are fresh processes, but a warm Vercel container is not
+# — so dispatch_update calls reset_cache() per update, scoping the cache to one
+# command rather than to the container's lifetime.
+
+_gist_cache: dict | None = None
+
+
+def reset_cache():
+    """Forget the cached Gist. Call at the start of a logical run."""
+    global _gist_cache
+    _gist_cache = None
+
+
+def _gist_files(fresh: bool = False) -> dict:
+    """The Gist's files, from cache unless `fresh` or nothing is cached yet."""
+    global _gist_cache
+    if fresh or _gist_cache is None:
+        files = _get_gist()
+        if not files:
+            return files  # rule 1: never cache a failed or empty fetch
+        _gist_cache = files
+    return _gist_cache
+
+
+def _cache_put(contents: dict):
+    """Put resolved file text into the cache. No-op if nothing is cached yet.
+
+    Used for two things: reflecting a landed write (rule 2), and storing the
+    body of a file the Gist API truncated, so the raw_url refetch below happens
+    once per run rather than on every read of the largest file we have.
+    """
+    if _gist_cache is None:
+        return
+    for name, content in contents.items():
+        _gist_cache[name] = {"content": content, "truncated": False}
+
+
+def _read_file(filename: str, fresh: bool = False) -> dict | list:
     """Read a single JSON file from the Gist.
 
     Returns an empty container when the file is absent or unreadable. Callers
     that go on to WRITE the same file must treat an empty result as "no data
     yet", never as "data was deleted" — see save_model_data.
+
+    `fresh` bypasses the per-run cache; see the note above it.
     """
-    files = _get_gist()
+    files = _gist_files(fresh)
     if filename in files:
         try:
-            content = _file_content(files[filename])
+            entry = files[filename]
+            content = _file_content(entry)
             if content is not None:
+                if entry.get("truncated"):
+                    _cache_put({filename: content})
                 return json.loads(content)
         except (json.JSONDecodeError, KeyError) as e:
             print(f"[storage] Could not parse {filename}: {e}")
@@ -106,13 +169,15 @@ def _write_file(filename: str, data) -> bool:
     if not GITHUB_TOKEN or not GIST_ID:
         print(f"[storage] No Gist credentials — skipping write for {filename}")
         return False
+    content = json.dumps(data, indent=2)
     try:
         r = requests.patch(
             f"https://api.github.com/gists/{GIST_ID}",
             headers=HEADERS, timeout=15,
-            json={"files": {filename: {"content": json.dumps(data, indent=2)}}},
+            json={"files": {filename: {"content": content}}},
         )
         r.raise_for_status()
+        _cache_put({filename: content})
         return True
     except Exception as e:
         print(f"[storage] Gist write error ({filename}): {e}")
@@ -123,17 +188,16 @@ def _write_files(file_dict: dict) -> bool:
     """Write multiple files to the Gist in one API call. True if it landed."""
     if not GITHUB_TOKEN or not GIST_ID:
         return False
+    contents = {name: json.dumps(data, indent=2)
+                for name, data in file_dict.items()}
     try:
-        files_payload = {
-            name: {"content": json.dumps(data, indent=2)}
-            for name, data in file_dict.items()
-        }
         r = requests.patch(
             f"https://api.github.com/gists/{GIST_ID}",
             headers=HEADERS, timeout=15,
-            json={"files": files_payload},
+            json={"files": {n: {"content": c} for n, c in contents.items()}},
         )
         r.raise_for_status()
+        _cache_put(contents)
         return True
     except Exception as e:
         print(f"[storage] Gist batch write error: {e}")
@@ -182,7 +246,9 @@ def append_price(thb_gram: float, usd_oz: float, thb_rate: float):
     }
 
     # Re-read immediately before writing to pick up any concurrent appends.
-    history = _read_file(PRICE_HISTORY_FILE)
+    # fresh=True on purpose: this is the guard, and our own cache cannot see
+    # what another run wrote.
+    history = _read_file(PRICE_HISTORY_FILE, fresh=True)
 
     # Hourly throttle: skip the append (but still return current history) if
     # the newest point is fresher than MIN_APPEND_INTERVAL_MIN.
@@ -424,12 +490,20 @@ def save_day_state_and_model(state: dict, model_data: dict) -> bool:
 
 
 # ── Subscribers ────────────────────────────────────────────────
-def get_subscribers() -> list:
-    """Get list of subscriber chat IDs."""
-    data = _read_file(SUBSCRIBERS_FILE)
+def _subs_of(data) -> list:
+    """Subscriber ids out of an already-read subscribers file.
+
+    The file is either the modern {"chat_ids": [...], "prefs": {...}} or a
+    bare list from before prefs existed.
+    """
     if isinstance(data, list):
         return data
     return data.get("chat_ids", [])
+
+
+def get_subscribers() -> list:
+    """Get list of subscriber chat IDs."""
+    return _subs_of(_read_file(SUBSCRIBERS_FILE))
 
 
 def add_subscriber(chat_id: str) -> bool:
@@ -440,7 +514,7 @@ def add_subscriber(chat_id: str) -> bool:
     used to reset everyone's /mute and /quiet settings on each new /subscribe.
     """
     data = _read_file(SUBSCRIBERS_FILE)
-    subs = get_subscribers()
+    subs = _subs_of(data)
     if chat_id in subs:
         return False
     subs.append(chat_id)
@@ -452,7 +526,7 @@ def add_subscriber(chat_id: str) -> bool:
 def remove_subscriber(chat_id: str) -> bool:
     """Remove a subscriber. Returns True if removed, False if not found."""
     data = _read_file(SUBSCRIBERS_FILE)
-    subs = get_subscribers()
+    subs = _subs_of(data)
     if chat_id not in subs:
         return False
     subs.remove(chat_id)
@@ -538,7 +612,7 @@ def get_subscribers_and_prefs() -> tuple:
     data = _read_file(SUBSCRIBERS_FILE)
     if isinstance(data, list):
         return data, {}
-    return data.get("chat_ids", []), data.get("prefs", {})
+    return _subs_of(data), data.get("prefs", {})
 
 
 def prefs_allow(user_prefs: dict, category: str, hour: int) -> bool:

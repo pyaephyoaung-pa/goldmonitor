@@ -21,7 +21,7 @@ def _fake_dt(dtobj):
 
 def test_load_day_state_carries_prev_close(monkeypatch):
     store = {storage.DAY_STATE_FILE: {"date": "2026-06-17", "last_price": 4490.0}}
-    monkeypatch.setattr(storage, "_read_file", lambda f: store.get(f, {}))
+    monkeypatch.setattr(storage, "_read_file", lambda f, fresh=False: store.get(f, {}))
     monkeypatch.setattr(storage, "_write_file", lambda f, d: store.__setitem__(f, d))
     monkeypatch.setattr(storage, "datetime", _fake_dt(BKK.localize(_dt.datetime(2026, 6, 18, 3, 0))))
 
@@ -36,7 +36,7 @@ def test_load_day_state_carries_prev_close(monkeypatch):
 def harness(monkeypatch):
     store = {}
     monkeypatch.setattr(storage, "_read_file",
-                        lambda f: store.get(f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
+                        lambda f, fresh=False: store.get(f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
     monkeypatch.setattr(storage, "_write_file", lambda f, d: store.__setitem__(f, d))
     # notify() reads subscribers and prefs together in one Gist round-trip.
     monkeypatch.setattr(storage, "get_subscribers_and_prefs", lambda: ([], {}))

@@ -17,7 +17,7 @@ BKK = pytz.timezone("Asia/Bangkok")
 def harness(monkeypatch):
     store = {}
 
-    def fake_read(f):
+    def fake_read(f, fresh=False):
         return store.get(f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {})
 
     monkeypatch.setattr(storage, "_read_file", fake_read)

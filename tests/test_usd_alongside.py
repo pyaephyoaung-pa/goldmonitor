@@ -22,7 +22,7 @@ class _MemStore:
         self.files = {}
         monkeypatch.setattr(
             storage, "_read_file",
-            lambda f: self.files.get(
+            lambda f, fresh=False: self.files.get(
                 f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
         monkeypatch.setattr(storage, "_write_file",
                             lambda f, d: self.files.__setitem__(f, d))
