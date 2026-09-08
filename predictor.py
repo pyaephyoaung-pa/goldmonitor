@@ -6,11 +6,8 @@ Gold Price Prediction Engine
 
 from __future__ import annotations
 
-import numpy as np
 from datetime import datetime, timedelta
-import json
-import pickle
-import base64
+import math
 
 import pytz
 
@@ -307,7 +304,7 @@ def analyze(history: list) -> dict:
 
 # Feature-vector order is fixed; see `feature_names` in train_model(). Adding or
 # reordering a feature invalidates any model already stored in the Gist, so the
-# training metadata records the names alongside the pickles.
+# training metadata records the names alongside the exported models.
 
 EVENT_HOURS_CAP = 168.0  # a week out is "far away" as far as the model cares
 
@@ -394,12 +391,113 @@ def _build_labels(history: list, idx: int, horizon: int) -> int | None:
     return 1 if (max_future - current) > (current - min_future) else 0
 
 
+# ── Model serialization (no pickle) ─────────────────────────────
+#
+# Models used to be stored as base64 pickles in the Gist and loaded with
+# pickle.loads(). Unpickling EXECUTES CODE, so anything that could write to
+# that Gist could run arbitrary code inside the Actions runner — which holds
+# the Telegram bot token and every other secret. The trust boundary was a
+# single GitHub token guarding what is only ever a data store.
+#
+# A GradientBoostingClassifier for binary log-loss is a small amount of
+# arithmetic, so we export the trees as plain numbers and score them here:
+#
+#     raw   = intercept + learning_rate * sum(leaf value of each tree)
+#     P(up) = 1 / (1 + exp(-raw))
+#
+# The export is VERIFIED against sklearn's own predict_proba before it is
+# stored (see _export_model), so a future sklearn changing its internals
+# fails loudly at training time instead of silently scoring differently in
+# production. Inference is now pure stdlib arithmetic — no pickle, no
+# scikit-learn, no numpy — so only the training job needs those installed.
+
+MODEL_FORMAT = "gbdt-json-1"
+
+# Match sklearn's exactly: leaves are marked by children_left == TREE_LEAF.
+_TREE_LEAF = -1
+
+# Agreement required between our scorer and sklearn's, in probability.
+_EXPORT_TOLERANCE = 1e-9
+
+
+def _export_tree(estimator) -> dict:
+    """One fitted DecisionTreeRegressor as JSON-safe arrays."""
+    t = estimator.tree_
+    return {
+        "left": t.children_left.tolist(),
+        "right": t.children_right.tolist(),
+        "feature": t.feature.tolist(),
+        "threshold": t.threshold.tolist(),
+        # Gradient boosting overwrites leaf values with its line-search step,
+        # so tree_.value IS what estimator.predict() returns.
+        "value": t.value.reshape(-1).tolist(),
+    }
+
+
+def _tree_value(tree: dict, features: list) -> float:
+    """Walk one exported tree to its leaf. sklearn's rule: <= goes left.
+
+    The node budget is not defensive theatre — this walks data read back from
+    a shared store, and a corrupted `left` array would otherwise spin forever
+    inside the monitor's five-minute loop.
+    """
+    left, right = tree["left"], tree["right"]
+    node = 0
+    for _ in range(len(left)):
+        if left[node] == _TREE_LEAF:
+            return tree["value"][node]
+        node = (left[node] if features[tree["feature"][node]] <= tree["threshold"][node]
+                else right[node])
+    raise ValueError("exported tree has no reachable leaf")
+
+
+def _score_bundle(bundle: dict, features: list) -> float:
+    """P(price goes UP) from an exported bundle. Pure arithmetic, no imports."""
+    raw = bundle["intercept"] + bundle["learning_rate"] * sum(
+        _tree_value(t, features) for t in bundle["trees"])
+    # exp overflows to inf for |raw| far from zero; the limits are 0 and 1.
+    if raw < -700:
+        return 0.0
+    if raw > 700:
+        return 1.0
+    return 1.0 / (1.0 + math.exp(-raw))
+
+
+def _export_model(model, X) -> dict | None:
+    """Export `model` as arithmetic, or None if it does not reproduce exactly.
+
+    The intercept is recovered from sklearn's own decision_function rather
+    than rebuilt from the class prior, so it stays correct whatever sklearn
+    does internally — and the whole export is then replayed against
+    predict_proba on the training set before it is trusted.
+    """
+    trees = [_export_tree(est) for est in model.estimators_[:, 0]]
+    lr = float(model.learning_rate)
+
+    first = list(X[0])
+    intercept = float(model.decision_function(X[:1])[0]
+                      - lr * sum(_tree_value(t, first) for t in trees))
+    bundle = {"format": MODEL_FORMAT, "intercept": intercept,
+              "learning_rate": lr, "trees": trees}
+
+    expected = model.predict_proba(X)[:, 1]
+    worst = max(abs(_score_bundle(bundle, list(row)) - p)
+                for row, p in zip(X, expected))
+    if worst > _EXPORT_TOLERANCE:
+        print(f"[predictor] tree export disagrees with sklearn by {worst:.3g} "
+              f"— refusing to store it (sklearn internals may have changed)")
+        return None
+    return bundle
+
+
 def train_model(history: list) -> dict | None:
     """Train gradient boosting models for 4h, 12h, 24h prediction.
 
-    Returns serialized models as base64 strings, or None if not enough data.
+    Returns the models exported as plain numbers (see _export_model), or None
+    if there is not enough data — or if an export could not be verified.
     """
     try:
+        import numpy as np
         from sklearn.ensemble import GradientBoostingClassifier
     except ImportError:
         print("[predictor] scikit-learn not available — skipping ML training")
@@ -456,10 +554,24 @@ def train_model(history: list) -> dict | None:
             print(f"[predictor] {name}: too few hold-out samples ({len(X_te)}) — skipping")
             continue
 
-        eval_model = _make_model()
-        eval_model.fit(X_tr, y_tr)
-        oos_acc = round(eval_model.score(X_te, y_te) * 100, 1)
-        train_acc = round(eval_model.score(X_tr, y_tr) * 100, 1)
+        # A one-sided stretch of history gives every sample the same label, and
+        # sklearn refuses to fit a single class. That is a plain ValueError out
+        # of train_model, which in the monitor means a crash alert and a red run
+        # at 3am every day until the price series changes shape. Skip the
+        # horizon instead — the others may still be trainable.
+        if len(set(y_tr.tolist())) < 2:
+            print(f"[predictor] {name}: training window is all one class "
+                  f"— skipping this horizon")
+            continue
+
+        try:
+            eval_model = _make_model()
+            eval_model.fit(X_tr, y_tr)
+            oos_acc = round(eval_model.score(X_te, y_te) * 100, 1)
+            train_acc = round(eval_model.score(X_tr, y_tr) * 100, 1)
+        except ValueError as e:
+            print(f"[predictor] {name}: hold-out fit failed ({e}) — skipping")
+            continue
 
         # Majority-class baseline measured on the same hold-out window.
         ones = int(y_te.sum())
@@ -476,15 +588,22 @@ def train_model(history: list) -> dict | None:
 
         # Deploy a model trained on ALL data; the metrics above describe its
         # expected real-world skill.
-        model = _make_model()
-        model.fit(X_arr, y_arr)
+        try:
+            model = _make_model()
+            model.fit(X_arr, y_arr)
+        except ValueError as e:
+            print(f"[predictor] {name}: final fit failed ({e}) — skipping")
+            continue
 
-        model_bytes = pickle.dumps(model)
+        bundle = _export_model(model, X_arr)
+        if bundle is None:
+            continue  # verification failed; better no model than a wrong one
+
         models[name] = {
-            "model_b64": base64.b64encode(model_bytes).decode("utf-8"),
+            "trees": bundle,
             # Stamped so predict() can refuse a model trained on a different
-            # feature vector — adding a feature silently invalidates old
-            # pickles, and sklearn's own error is opaque.
+            # feature vector — adding a feature silently invalidates a stored
+            # model, and the resulting error is otherwise opaque.
             "n_features": X_arr.shape[1],
             "accuracy": oos_acc,          # back-compat: now the honest OOS number
             "oos_accuracy": oos_acc,
@@ -555,48 +674,50 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
                                        n=len(history), need=100 - len(history))
         return result
 
-    try:
-        import pickle
-        features = _extract_features(history, len(history) - 1)
-        if features is None:
-            result["ml_available"] = False
-            return result
-
-        X_pred = np.array([features])
-        result["ml_available"] = True
-        result["predictions"] = {}
-
-        for horizon_name, minfo in models_dict.items():
-            try:
-                trained_n = minfo.get("n_features")
-                if trained_n is not None and trained_n != X_pred.shape[1]:
-                    result["predictions"][horizon_name] = {
-                        "stale": True,
-                        "error": (f"trained on {trained_n} features, now "
-                                  f"{X_pred.shape[1]} — retrains at 3am BKK"),
-                    }
-                    continue
-                model = pickle.loads(base64.b64decode(minfo["model_b64"]))
-                proba = model.predict_proba(X_pred)[0]
-                pred_class = model.predict(X_pred)[0]
-                confidence = round(max(proba) * 100, 1)
-
-                direction = "UP" if pred_class == 1 else "DOWN"
-                result["predictions"][horizon_name] = {
-                    "direction": direction,
-                    "confidence": confidence,
-                    "model_accuracy": minfo.get("accuracy"),
-                    "oos_accuracy": minfo.get("oos_accuracy", minfo.get("accuracy")),
-                    "baseline_accuracy": minfo.get("baseline_accuracy"),
-                    "has_edge": minfo.get("has_edge", False),
-                    "training_samples": minfo.get("samples"),
-                }
-            except Exception as e:
-                result["predictions"][horizon_name] = {"error": str(e)}
-
-    except ImportError:
+    features = _extract_features(history, len(history) - 1)
+    if features is None:
         result["ml_available"] = False
-        result["ml_note"] = "scikit-learn not available"
+        return result
+
+    features = list(features)
+    result["ml_available"] = True
+    result["predictions"] = {}
+
+    for horizon_name, minfo in models_dict.items():
+        try:
+            trained_n = minfo.get("n_features")
+            if trained_n is not None and trained_n != len(features):
+                result["predictions"][horizon_name] = {
+                    "stale": True,
+                    "error": (f"trained on {trained_n} features, now "
+                              f"{len(features)} — retrains at 3am BKK"),
+                }
+                continue
+
+            bundle = minfo.get("trees")
+            if not bundle:
+                # A pre-switchover pickle. Deliberately NOT loaded: unpickling
+                # is the code-execution path this format exists to remove.
+                # Tonight's 3am retrain replaces it; until then, TA only.
+                result["predictions"][horizon_name] = {
+                    "stale": True,
+                    "error": "stored in the old pickle format — retrains at 3am BKK",
+                }
+                continue
+
+            proba_up = _score_bundle(bundle, features)
+            direction = "UP" if proba_up >= 0.5 else "DOWN"
+            result["predictions"][horizon_name] = {
+                "direction": direction,
+                "confidence": round(max(proba_up, 1.0 - proba_up) * 100, 1),
+                "model_accuracy": minfo.get("accuracy"),
+                "oos_accuracy": minfo.get("oos_accuracy", minfo.get("accuracy")),
+                "baseline_accuracy": minfo.get("baseline_accuracy"),
+                "has_edge": minfo.get("has_edge", False),
+                "training_samples": minfo.get("samples"),
+            }
+        except Exception as e:
+            result["predictions"][horizon_name] = {"error": str(e)}
 
     # ── Combined Signal ─────────────────────────────────────────
     if result.get("predictions"):

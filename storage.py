@@ -53,8 +53,8 @@ def _file_content(entry: dict) -> str | None:
     """Content of one Gist file entry, refetching if the API truncated it.
 
     GitHub inlines file content only up to 1 MB and sets `truncated: true`
-    beyond that. model_data.json (three base64 model pickles + the prediction
-    log) is the file most likely to cross that line. Parsing a truncated body
+    beyond that. model_data.json (three exported models + the prediction log)
+    is the file most likely to cross that line. Parsing a truncated body
     raises, which used to be swallowed into an empty container — and the next
     write then persisted that emptiness over real data. Follow `raw_url`
     instead so a large file still reads correctly.
@@ -532,7 +532,7 @@ def get_subscribers_and_prefs() -> tuple:
     """(chat_ids, prefs) from a SINGLE Gist read.
 
     get_subscribers() + get_all_prefs() pull the same file twice, and _get_gist
-    downloads every file in the Gist (including the model pickles) each time.
+    downloads every file in the Gist (including the stored models) each time.
     Broadcast paths that need both should use this instead.
     """
     data = _read_file(SUBSCRIBERS_FILE)
