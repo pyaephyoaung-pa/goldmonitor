@@ -22,7 +22,7 @@ class _MemStore:
         self.files = {}
         monkeypatch.setattr(
             storage, "_read_file",
-            lambda f: self.files.get(
+            lambda f, fresh=False: self.files.get(
                 f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
         monkeypatch.setattr(storage, "_write_file",
                             lambda f, d: self.files.__setitem__(f, d))
@@ -71,7 +71,7 @@ def test_get_subscribers_and_prefs_single_read(monkeypatch):
     reads = []
     original = storage._read_file
     monkeypatch.setattr(storage, "_read_file",
-                        lambda f: (reads.append(f), original(f))[1])
+                        lambda f, fresh=False: (reads.append(f), original(f))[1])
 
     subs, prefs = storage.get_subscribers_and_prefs()
     assert subs == ["111", "222"]

@@ -15,7 +15,7 @@ class _MemStore:
         self.write_calls = []
         monkeypatch.setattr(
             storage, "_read_file",
-            lambda f: self.files.get(
+            lambda f, fresh=False: self.files.get(
                 f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
 
         def _write(f, d):

@@ -6,7 +6,7 @@ class FakeStore:
     def __init__(self):
         self.data = {}
 
-    def read(self, filename):
+    def read(self, filename, fresh=False):
         if filename in self.data:
             return self.data[filename]
         return [] if filename in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}

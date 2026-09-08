@@ -1141,6 +1141,11 @@ def dispatch_update(update: dict) -> bool:
     Shared by both the poller and the webhook so command behaviour and access
     control can never drift between the two entrypoints again.
     """
+    # One update is one logical run. The cron entrypoints are fresh processes,
+    # but a warm Vercel container is not — without this, a second command on
+    # the same container would be served from the first one's cached Gist.
+    storage.reset_cache()
+
     # Inline keyboard button press — ack the spinner, then re-dispatch the
     # button's callback_data exactly as if the user had typed the command.
     cq = update.get("callback_query")

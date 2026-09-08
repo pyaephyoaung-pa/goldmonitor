@@ -32,7 +32,7 @@ def _hourly_history(n, start_price=4000.0, step=1.0):
 
 def test_append_price_throttled_when_fresh(monkeypatch):
     history = _hourly_history(5)
-    monkeypatch.setattr(storage, "_read_file", lambda f: list(history))
+    monkeypatch.setattr(storage, "_read_file", lambda f, fresh=False: list(history))
     writes = []
     monkeypatch.setattr(storage, "_write_file", lambda f, d: writes.append(d))
     result = storage.append_price(4100.0, 2400.0, 34.0)
@@ -46,7 +46,7 @@ def test_append_price_appends_when_stale(monkeypatch):
         "ts": (now - timedelta(minutes=61)).isoformat(),
         "thb_gram": 4000.0,
     }]
-    monkeypatch.setattr(storage, "_read_file", lambda f: list(history))
+    monkeypatch.setattr(storage, "_read_file", lambda f, fresh=False: list(history))
     writes = []
     monkeypatch.setattr(storage, "_write_file", lambda f, d: writes.append(d))
     result = storage.append_price(4100.0, 2400.0, 34.0)
@@ -55,7 +55,7 @@ def test_append_price_appends_when_stale(monkeypatch):
 
 
 def test_append_price_appends_to_empty(monkeypatch):
-    monkeypatch.setattr(storage, "_read_file", lambda f: [])
+    monkeypatch.setattr(storage, "_read_file", lambda f, fresh=False: [])
     writes = []
     monkeypatch.setattr(storage, "_write_file", lambda f, d: writes.append(d))
     result = storage.append_price(4100.0, 2400.0, 34.0)
@@ -102,7 +102,7 @@ class _MemStore:
     def __init__(self, monkeypatch):
         self.files = {}
         monkeypatch.setattr(storage, "_read_file",
-                            lambda f: self.files.get(f, {} if f != storage.PRICE_HISTORY_FILE else []))
+                            lambda f, fresh=False: self.files.get(f, {} if f != storage.PRICE_HISTORY_FILE else []))
         monkeypatch.setattr(storage, "_write_file",
                             lambda f, d: self.files.__setitem__(f, d))
 
