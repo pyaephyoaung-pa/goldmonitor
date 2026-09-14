@@ -490,6 +490,23 @@ def _export_model(model, X) -> dict | None:
     return bundle
 
 
+def ml_available() -> bool:
+    """True if the training extras (requirements-ml.txt) can be imported.
+
+    Inference has been pure stdlib since models became plain numbers, so numpy
+    and scikit-learn are installed only for the job that TRAINS. This lets a
+    caller tell "nothing to train yet" apart from "the training job is missing
+    its dependencies" — train_model returns None for both, so without it a
+    broken install would just stop updating the models with no error anywhere.
+    """
+    try:
+        import numpy  # noqa: F401
+        from sklearn.ensemble import GradientBoostingClassifier  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def train_model(history: list) -> dict | None:
     """Train gradient boosting models for 4h, 12h, 24h prediction.
 

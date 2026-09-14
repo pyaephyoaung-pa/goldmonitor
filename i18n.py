@@ -1339,6 +1339,20 @@ STRINGS: dict[str, dict[str, str]] = {
                "  🏆 วันที่ดีที่สุด: {best_day} ({best:+.2f}%)\n"
                "  💔 วันที่แย่ที่สุด: {worst_day} ({worst:+.2f}%)"),
     },
+    "monitor.ml_deps_missing": {
+        "en": ("⚠️ <b>ML training cannot run</b>\n"
+               "numpy / scikit-learn are missing from the monitor job — check "
+               "that it installs <code>requirements-ml.txt</code>.\n"
+               "Predictions keep working on technical analysis only."),
+        "my": ("⚠️ <b>ML training မလုပ်နိုင်ပါ</b>\n"
+               "Monitor job မှာ numpy / scikit-learn မရှိပါ — "
+               "<code>requirements-ml.txt</code> install လုပ်မလုပ် စစ်ပါ။\n"
+               "ခန့်မှန်းချက်များက technical analysis နဲ့ ဆက်အလုပ်လုပ်ပါမည်။"),
+        "th": ("⚠️ <b>เทรนโมเดลไม่ได้</b>\n"
+               "งาน monitor ไม่มี numpy / scikit-learn — ตรวจว่าติดตั้ง "
+               "<code>requirements-ml.txt</code> แล้วหรือยัง\n"
+               "การพยากรณ์จะใช้ technical analysis ต่อไป"),
+    },
     "monitor.crash": {
         "en": ("🛑 <b>Gold Monitor crashed</b>\n"
                "<code>{error}</code>\n"

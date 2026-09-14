@@ -1,0 +1,9 @@
+# Training-only dependencies, installed by the gold_monitor workflow.
+#
+# Models are stored as plain numbers and scored with stdlib arithmetic, so
+# NOTHING on the inference path imports these — only predictor.train_model
+# does. Keeping them out of requirements.txt keeps the Vercel webhook bundle
+# small and its cold start fast.
+-r requirements.txt
+numpy>=1.24
+scikit-learn>=1.3

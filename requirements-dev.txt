@@ -1,3 +1,4 @@
-# Dev/test dependencies (not needed at runtime)
--r requirements.txt
+# Dev/test dependencies (not needed at runtime).
+# Pulls in the training extras too — the model-export tests fit real models.
+-r requirements-ml.txt
 pytest>=8.0

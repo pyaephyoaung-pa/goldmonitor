@@ -38,7 +38,9 @@ jobs:
           cache: pip  # restore wheels from cache — big per-run time saver
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # requirements-ml.txt pulls in requirements.txt and adds numpy +
+        # scikit-learn: this is the only job that TRAINS the models.
+        run: pip install -r requirements-ml.txt
 
       - name: Run gold monitor
         env:

@@ -493,7 +493,8 @@ goldmonitor/
 ├── setup_gist.py            # One-time Gist setup script
 ├── setup_webhook.py         # Webhook setup script
 ├── vercel.json              # Vercel deployment config
-├── requirements.txt         # Runtime dependencies
+├── requirements.txt         # Runtime dependencies (webhook + poller)
+├── requirements-ml.txt      # + numpy/scikit-learn, training only
 ├── requirements-dev.txt     # + pytest for tests
 ├── .github/workflows/
 │   ├── gold_monitor.yml     # Price check (cron)
@@ -768,7 +769,8 @@ goldmonitor/
 ├── setup_gist.py            # One-time Gist setup script
 ├── setup_webhook.py         # Webhook setup script
 ├── vercel.json              # Vercel deployment config
-├── requirements.txt         # Runtime dependencies
+├── requirements.txt         # Runtime dependencies (webhook + poller)
+├── requirements-ml.txt      # + numpy/scikit-learn, training only
 ├── requirements-dev.txt     # + pytest for tests
 ├── .github/workflows/
 │   ├── gold_monitor.yml     # Price check (cron)
