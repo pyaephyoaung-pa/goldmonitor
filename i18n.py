@@ -315,6 +315,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "⚠️ ရွှေ မလုံလောက်ပါ — portfolio ထဲမှာ ရွှေအနည်းငယ်သာ ရှိပါသည်",
         "th": "⚠️ ทองไม่พอ — พอร์ตของคุณมีน้อยกว่านั้น",
     },
+    "entry.would_oversell": {
+        "en": ("⚠️ That would leave a sale with no gold behind it — "
+               "check /portfolio first"),
+        "my": ("⚠️ ဒီပြောင်းလဲမှုက ရောင်းချမှုတစ်ခုကို ရွှေမရှိဘဲ ကျန်ခဲ့စေပါမည် — "
+               "/portfolio အရင်စစ်ပါ"),
+        "th": ("⚠️ การแก้ไขนี้จะทำให้มีรายการขายที่ไม่มีทองรองรับ — "
+               "ตรวจ /portfolio ก่อน"),
+    },
     "sold.ok": {
         "en": ("✅ <b>Sale logged!</b>\n"
                "━━━━━━━━━━━━━━━\n"
