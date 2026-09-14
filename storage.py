@@ -606,15 +606,26 @@ def add_subscriber(chat_id: str) -> bool:
     return True
 
 
-def remove_subscriber(chat_id: str) -> bool:
-    """Remove a subscriber. Returns True if removed, False if not found."""
+def remove_subscriber(chat_id: str, drop_prefs: bool = False) -> bool:
+    """Remove a subscriber. Returns True if removed, False if not found.
+
+    Preferences are KEPT by default. /unsubscribe means "stop sending me
+    alerts", not "forget me": the user can still run /price, and wiping their
+    prefs used to reset the language they chose with /lang along with their
+    quiet hours, so coming back meant setting it all up again.
+
+    `drop_prefs` is for the other caller — a subscriber removed because
+    Telegram said they blocked the bot. That one really is gone, so nothing of
+    theirs is worth keeping.
+    """
     data = _read_file(SUBSCRIBERS_FILE)
     subs = _subs_of(data)
     if chat_id not in subs:
         return False
     subs.remove(chat_id)
     prefs = data.get("prefs", {}) if isinstance(data, dict) else {}
-    prefs.pop(str(chat_id), None)
+    if drop_prefs:
+        prefs.pop(str(chat_id), None)
     _write_file(SUBSCRIBERS_FILE, {"chat_ids": subs, "prefs": prefs})
     return True
 

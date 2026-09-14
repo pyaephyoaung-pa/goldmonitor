@@ -1153,6 +1153,7 @@ def dispatch_update(update: dict) -> bool:
     # but a warm Vercel container is not — without this, a second command on
     # the same container would be served from the first one's cached Gist.
     storage.reset_cache()
+    signals.reset_cache()
 
     # Inline keyboard button press — ack the spinner, then re-dispatch the
     # button's callback_data exactly as if the user had typed the command.

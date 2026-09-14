@@ -124,6 +124,26 @@ def _closes_for(key: str) -> tuple:
     return None, []
 
 
+# ── Per-run cache ───────────────────────────────────────────────
+#
+# One fetch is three metrics, each up to four HTTP round-trips as it walks its
+# ticker candidates. A monitor run can want the block twice — the morning or
+# evening summary, plus the regime-divergence check when volatility spikes —
+# and these are DAILY closes, so fetching them twice minutes apart buys
+# nothing. Cached for the length of a run, like the Gist.
+#
+# A failed fetch is not cached: it returns {} so callers omit the block, and
+# caching that would suppress the block for the rest of the run.
+
+_macro_cache: dict | None = None
+
+
+def reset_cache():
+    """Forget the cached macro data. Call at the start of a logical run."""
+    global _macro_cache
+    _macro_cache = None
+
+
 def fetch_macro() -> dict:
     """Fetch latest value + daily change for each macro metric.
 
@@ -131,6 +151,10 @@ def fetch_macro() -> dict:
     succeeded (missing/failed metrics are simply absent). `change_abs` is the
     raw daily delta — used to show yields in percentage points (pp).
     """
+    global _macro_cache
+    if _macro_cache is not None:
+        return _macro_cache
+
     out = {}
     for key in YAHOO_SYMBOLS:
         sym, closes = _closes_for(key)
@@ -147,6 +171,8 @@ def fetch_macro() -> dict:
             "change_abs": change_abs,
             "symbol": sym,
         }
+    if out:
+        _macro_cache = out
     return out
 
 
