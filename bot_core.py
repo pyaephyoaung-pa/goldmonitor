@@ -705,7 +705,11 @@ def cmd_edit(chat_id: str, args: str, lang: str):
         send_message(i18n.t("err.amount_positive", lang), chat_id)
         return
 
-    entry = storage.edit_entry(index, new_amount)
+    try:
+        entry = storage.edit_entry(index, new_amount)
+    except storage.InsufficientGold:
+        send_message(i18n.t("entry.would_oversell", lang), chat_id)
+        return
     if entry is None:
         send_message(i18n.t("edit.not_found", lang, index=index), chat_id)
         return
@@ -726,7 +730,11 @@ def cmd_delete(chat_id: str, args: str, lang: str):
         send_message(i18n.t("delete.usage", lang), chat_id)
         return
 
-    entry = storage.delete_entry(index)
+    try:
+        entry = storage.delete_entry(index)
+    except storage.InsufficientGold:
+        send_message(i18n.t("entry.would_oversell", lang), chat_id)
+        return
     if entry is None:
         send_message(i18n.t("delete.not_found", lang, index=index), chat_id)
         return

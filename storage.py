@@ -348,16 +348,90 @@ def log_buy(amount_thb: float, price_per_gram: float):
     return entry
 
 
+class InsufficientGold(Exception):
+    """An edit or delete would leave the ledger selling gold never held."""
+
+
+# Rounding slack, in grams, when comparing a sale against holdings.
+GRAM_TOLERANCE = 0.0001
+
+
+def _replay(entries: list) -> dict:
+    """Walk the ledger in order, carrying a moving-average cost pool.
+
+    Every sale takes its cost basis from the average cost of the gold held AT
+    THAT MOMENT. That is the whole point of replaying rather than averaging
+    over the finished ledger: the old code divided TOTAL buy value by TOTAL
+    grams bought, including buys made AFTER a sale, so buying more gold today
+    silently rewrote the profit reported for a sale last month.
+
+    Entries are in append order, which is chronological — nothing reorders
+    them, and /edit only changes an amount in place.
+
+    `oversold` is grams a sale claimed beyond what the pool held; it is only
+    ever non-zero for a ledger that /edit or /delete would have corrupted, and
+    is what those two check before saving.
+    """
+    grams = cost = realized = 0.0
+    bought_thb = bought_grams = sold_thb = oversold = 0.0
+    buys = sells = 0
+
+    for e in entries:
+        e_grams = e.get("grams") or 0.0
+        amount = e.get("amount_thb") or 0.0
+        if e.get("type", "buy") == "buy":
+            buys += 1
+            bought_thb += amount
+            bought_grams += e_grams
+            grams += e_grams
+            cost += amount
+            continue
+
+        sells += 1
+        sold_thb += amount
+        avg = cost / grams if grams > 0 else 0.0
+        taken = min(e_grams, grams)
+        oversold += e_grams - taken
+        basis = taken * avg
+        realized += amount - basis
+        grams -= taken
+        cost -= basis
+
+    # Average cost of what is still HELD. With nothing held there is no such
+    # thing, so fall back to the lifetime average buy price, which is what
+    # /portfolio showed before and still reads sensibly next to a realized P&L.
+    if grams > 0:
+        avg_cost = cost / grams
+    elif bought_grams > 0:
+        avg_cost = bought_thb / bought_grams
+    else:
+        avg_cost = 0.0
+
+    return {
+        "grams": round(grams, 4),
+        "cost": round(cost, 2),
+        "avg_cost": round(avg_cost, 2),
+        "realized": round(realized, 2),
+        "bought_thb": round(bought_thb, 2),
+        "sold_thb": round(sold_thb, 2),
+        "buys": buys,
+        "sells": sells,
+        "oversold": round(oversold, 4),
+    }
+
+
+def _reject_if_oversold(entries: list):
+    """Guard for /edit and /delete — log_sell checks before appending."""
+    if _replay(entries)["oversold"] > GRAM_TOLERANCE:
+        raise InsufficientGold()
+
+
 def log_sell(amount_thb: float, price_per_gram: float):
     """Log a gold sale. Returns entry dict or None if not enough gold."""
     entries = _get_entries()
-    # Calculate current holdings
-    total_grams = sum(
-        e["grams"] if e["type"] == "buy" else -e["grams"]
-        for e in entries
-    )
+    total_grams = _replay(entries)["grams"]
     grams_to_sell = round(amount_thb / price_per_gram, 4)
-    if grams_to_sell > total_grams + 0.0001:  # small tolerance
+    if grams_to_sell > total_grams + GRAM_TOLERANCE:
         return None  # not enough gold
 
     now = datetime.now(BANGKOK_TZ)
@@ -374,29 +448,53 @@ def log_sell(amount_thb: float, price_per_gram: float):
 
 
 def edit_entry(index: int, new_amount_thb: float) -> dict | None:
-    """Edit an entry's THB amount by 1-based index. Recalculates grams."""
+    """Edit an entry's THB amount by 1-based index. Recalculates grams.
+
+    None if the index does not exist; raises InsufficientGold if the change
+    would leave the ledger selling gold that was never held. log_sell refuses
+    an oversell on the way in, but editing a sale upwards (or deleting the buy
+    that funded it) reached the same broken state from the side — and a
+    negative pool then reported a portfolio worth nothing, silently.
+    """
     entries = _get_entries()
     if index < 1 or index > len(entries):
         return None
     e = entries[index - 1]
-    e["amount_thb"] = new_amount_thb
-    e["grams"] = round(new_amount_thb / e["price_per_gram"], 4)
+    updated = {**e, "amount_thb": new_amount_thb,
+               "grams": round(new_amount_thb / e["price_per_gram"], 4)}
+
+    # Validate the prospective ledger BEFORE touching the stored one.
+    _reject_if_oversold(entries[:index - 1] + [updated] + entries[index:])
+
+    entries[index - 1] = updated
     _save_entries(entries)
-    return e
+    return updated
 
 
 def delete_entry(index: int) -> dict | None:
-    """Delete an entry by 1-based index. Returns the removed entry."""
+    """Delete an entry by 1-based index. Returns the removed entry.
+
+    None if the index does not exist; raises InsufficientGold if removing it
+    would leave a later sale unfunded — see edit_entry.
+    """
     entries = _get_entries()
     if index < 1 or index > len(entries):
         return None
+
+    _reject_if_oversold(entries[:index - 1] + entries[index:])
+
     removed = entries.pop(index - 1)
     _save_entries(entries)
     return removed
 
 
 def get_portfolio() -> dict:
-    """Calculate portfolio summary from buy/sell log."""
+    """Calculate portfolio summary from buy/sell log.
+
+    `avg_cost` is the average cost of the gold STILL HELD (the lifetime average
+    buy price once everything is sold), and `total_invested` is what that gold
+    cost. Both come from replaying the ledger — see _replay.
+    """
     entries = _get_entries()
     if not entries:
         return {
@@ -406,33 +504,18 @@ def get_portfolio() -> dict:
             "entries": [],
         }
 
-    buys = [e for e in entries if e["type"] == "buy"]
-    sells = [e for e in entries if e["type"] == "sell"]
-
-    total_bought_thb = sum(b["amount_thb"] for b in buys)
-    total_bought_grams = sum(b["grams"] for b in buys)
-    total_sold_thb = sum(s["amount_thb"] for s in sells)
-    total_sold_grams = sum(s["grams"] for s in sells)
-
-    net_grams = round(total_bought_grams - total_sold_grams, 4)
-    avg_buy_cost = round(total_bought_thb / total_bought_grams, 2) if total_bought_grams > 0 else 0
-
-    # Realized P&L: sell revenue minus cost basis of sold grams
-    cost_of_sold = round(total_sold_grams * avg_buy_cost, 2)
-    realized_pnl = round(total_sold_thb - cost_of_sold, 2)
-
-    # Net invested = what's still "in" the portfolio
-    net_invested = round(total_bought_thb - cost_of_sold, 2)
-
+    book = _replay(entries)
     return {
-        "total_invested": net_invested,
-        "total_grams": net_grams,
-        "avg_cost": avg_buy_cost,
-        "num_buys": len(buys),
-        "num_sells": len(sells),
-        "total_bought_thb": round(total_bought_thb, 2),
-        "total_sold_thb": round(total_sold_thb, 2),
-        "realized_pnl": realized_pnl,
+        # What is still in the portfolio, at the cost it was actually bought
+        # for — not total spend minus a retrospectively averaged cost of sales.
+        "total_invested": book["cost"],
+        "total_grams": book["grams"],
+        "avg_cost": book["avg_cost"],
+        "num_buys": book["buys"],
+        "num_sells": book["sells"],
+        "total_bought_thb": book["bought_thb"],
+        "total_sold_thb": book["sold_thb"],
+        "realized_pnl": book["realized"],
         "entries": entries[-10:],
     }
 
