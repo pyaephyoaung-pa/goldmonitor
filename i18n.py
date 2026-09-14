@@ -80,6 +80,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "⚠️ တစ်ခုခု မှားယွင်းသွားပါသည် — ခဏနေ ပြန်စမ်းပါ",
         "th": "⚠️ เกิดข้อผิดพลาด — ลองใหม่อีกสักครู่",
     },
+    "err.rate_limited": {
+        "en": ("🐢 Slow down a moment — too many commands.\n"
+               "Try again in about {minutes} min."),
+        "my": ("🐢 ခဏ နားပါဦး — command အရမ်းများနေပါပြီ။\n"
+               "{minutes} မိနစ်ခန့်အကြာမှာ ပြန်စမ်းပါ။"),
+        "th": ("🐢 ช้าลงหน่อย — ใช้คำสั่งถี่เกินไป\n"
+               "ลองใหม่ในอีกประมาณ {minutes} นาที"),
+    },
     "err.unknown_command": {
         "en": "❓ Unknown command: {cmd}\nType /help for available commands",
         "my": "❓ Unknown command: {cmd}\nType /help for available commands",

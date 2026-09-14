@@ -1118,6 +1118,11 @@ OWNER_COMMANDS = {
 
 COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}
 
+# Commands that make an outbound third-party request — the gold API, Yahoo /
+# Stooq, QuickChart, a news feed. They get a tighter allowance than the rest
+# because abusing them costs somebody else's quota, not just ours.
+EXTERNAL_COMMANDS = {"/price", "/chart", "/macro", "/news", "/alert"}
+
 
 def _parse_command(text: str) -> tuple:
     """Parse '/cmd@bot args' -> (cmd, args), with prefix-glue recovery.
@@ -1182,6 +1187,21 @@ def dispatch_update(update: dict) -> bool:
     # Resolved once and threaded into the handler, so rendering a message with
     # dozens of strings costs no extra Gist round-trips.
     lang = storage.get_user_lang(chat_id)
+
+    # Rate limit before doing any work — including for an unknown command,
+    # which still costs a Gist read and a Telegram send. The owner is never
+    # throttled: the monitor's own alerts must never be the thing that trips.
+    if not is_owner:
+        verdict = storage.allow_command(chat_id, cmd in EXTERNAL_COMMANDS)
+        if not verdict["allowed"]:
+            print(f"[bot] Rate limited {chat_id} on '{cmd}' "
+                  f"(retry in {verdict['retry_after']}s)")
+            if verdict["notify"]:
+                send_message(
+                    i18n.t("err.rate_limited", lang,
+                           minutes=max(1, round(verdict["retry_after"] / 60))),
+                    chat_id)
+            return False
 
     handler = COMMANDS.get(cmd)
     if not handler:
