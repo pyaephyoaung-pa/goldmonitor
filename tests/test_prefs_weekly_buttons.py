@@ -39,11 +39,29 @@ def test_set_and_get_pref(monkeypatch):
     assert prefs["evening"] is True  # untouched defaults survive
 
 
-def test_unsubscribe_clears_prefs(monkeypatch):
+def test_unsubscribe_keeps_prefs(monkeypatch):
+    """/unsubscribe means "stop the alerts", not "forget me" — the user can
+    still run /price, and used to lose the language they set with /lang."""
     _MemStore(monkeypatch)
     storage.add_subscriber("111")
     storage.set_user_pref("111", "quiet", "22-7")
+    storage.set_user_pref("111", "lang", "th")
+
     assert storage.remove_subscriber("111") is True
+
+    assert storage.get_subscribers() == []
+    assert storage.get_user_prefs("111")["quiet"] == "22-7"
+    assert storage.get_user_lang("111") == "th"
+
+
+def test_blocked_subscriber_is_forgotten(monkeypatch):
+    """The other caller: Telegram said they blocked the bot."""
+    _MemStore(monkeypatch)
+    storage.add_subscriber("111")
+    storage.set_user_pref("111", "quiet", "22-7")
+
+    assert storage.remove_subscriber("111", drop_prefs=True) is True
+
     assert storage.get_user_prefs("111") == storage.PREF_DEFAULTS
 
 

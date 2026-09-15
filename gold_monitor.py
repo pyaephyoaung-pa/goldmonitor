@@ -110,8 +110,10 @@ def notify(msg, category: str = "alerts"):
             time.sleep(0.1)
         resp = bot_core.send_message(body_for(chat_id), chat_id)
         if resp and not resp.get("ok") and resp.get("error_code") == 403:
+            # Blocked the bot — unlike /unsubscribe, this one is not coming
+            # back, so their prefs go too.
             print(f"[Telegram] Removing blocked subscriber: {chat_id}")
-            storage.remove_subscriber(chat_id)
+            storage.remove_subscriber(chat_id, drop_prefs=True)
 
 
 # ── Helpers ─────────────────────────────────────────────────────
