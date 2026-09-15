@@ -1,4 +1,4 @@
+# Runtime dependencies — everything except training the ML models.
+# The webhook (Vercel) and the command poller install only these.
 requests>=2.31
 pytz>=2023.3
-numpy>=1.24
-scikit-learn>=1.3

@@ -538,18 +538,33 @@ def main():
         last_trained = model_data.get("last_trained", "")
         today = now.strftime("%Y-%m-%d")
         if not last_trained or last_trained[:10] != today:
-            print("[ML] Training prediction models...")
-            new_model = predictor.train_model(history)
-            if new_model:
-                # MERGE, never replace: train_model returns only the model
-                # payload, so assigning it wholesale would drop the
-                # "predictions" accuracy log that the live hit-rate is built
-                # from — erasing weeks of scored forecasts on every retrain.
-                model_data.update(new_model)
-                storage.save_model_data(model_data)
-                print("[ML] Models saved to Gist")
+            if not predictor.ml_available():
+                # numpy + scikit-learn live in requirements-ml.txt and are
+                # installed by THIS workflow only. If that install ever drops
+                # them, train_model would simply print and return None — the
+                # models would quietly stop updating and /predict would fall
+                # back to TA for good. Tell the owner, once a day while broken.
+                print("[ML] numpy/scikit-learn missing — cannot train. "
+                      "Does this job install requirements-ml.txt?")
+                if TG_CHAT_ID and model_data.get("ml_warned_on", "")[:10] != today:
+                    bot_core.send_message(
+                        i18n.t("monitor.ml_deps_missing",
+                               storage.get_user_lang(TG_CHAT_ID)), TG_CHAT_ID)
+                    model_data["ml_warned_on"] = today
+                    storage.save_model_data(model_data)
             else:
-                print("[ML] Training skipped or failed")
+                print("[ML] Training prediction models...")
+                new_model = predictor.train_model(history)
+                if new_model:
+                    # MERGE, never replace: train_model returns only the model
+                    # payload, so assigning it wholesale would drop the
+                    # "predictions" accuracy log that the live hit-rate is built
+                    # from — erasing weeks of scored forecasts on every retrain.
+                    model_data.update(new_model)
+                    storage.save_model_data(model_data)
+                    print("[ML] Models saved to Gist")
+                else:
+                    print("[ML] Training skipped or failed")
 
     # ── Webhook watchdog ────────────────────────────────────────
     # Runs here, not just in the poller, because the poller workflow can be
