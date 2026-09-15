@@ -47,6 +47,11 @@ GitHub Actions + Python — **$0 to run**.
 | `/lang en\|my\|th` | 🌐 Change language (English / မြန်မာ / ไทย) |
 | `/help` | ❓ All commands + tap-able buttons |
 
+> 🐢 **Rate limit:** 30 commands per 10 minutes per chat, and 10 for the ones
+> that call an outside service (`/price`, `/chart`, `/macro`, `/news`,
+> `/alert`). Generous for a person, bounded for a script — the shared GitHub
+> quota also runs the price alerts. The owner is never throttled.
+
 ### 🔒 Owner-Only Commands (bot owner only)
 
 | Command | Description |
@@ -560,6 +565,11 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/quiet 22-7` | 🤫 Quiet hours (BKK) — `/quiet off` ဖြင့် ပိတ်ပါ |
 | `/lang en\|my\|th` | 🌐 ဘာသာစကား ပြောင်းပါ (English / မြန်မာ / ไทย) |
 | `/help` | ❓ Commands အားလုံး + tap-able buttons |
+
+> 🐢 **Rate limit:** chat တစ်ခုလျှင် ၁၀ မိနစ်အတွင်း command ၃၀၊ ပြင်ပ service
+> ခေါ်တဲ့ command များ (`/price`, `/chart`, `/macro`, `/news`, `/alert`) အတွက်
+> ၁၀။ GitHub quota ကို price alert တွေနဲ့ မျှသုံးနေလို့ပါ။ Owner ကို
+> ကန့်သတ်မထားပါ။
 
 ### 🔒 Owner-Only Commands (bot owner သီးသန့်)
 

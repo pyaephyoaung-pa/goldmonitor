@@ -25,6 +25,7 @@ BOT_STATE_FILE = "bot_state.json"
 MODEL_DATA_FILE = "model_data.json"
 SUBSCRIBERS_FILE = "subscribers.json"
 LEVEL_ALERTS_FILE = "level_alerts.json"
+RATE_LIMIT_FILE = "rate_limit.json"
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
@@ -793,6 +794,87 @@ def pop_triggered_alerts(thb_gram: float, usd_oz: float | None = None) -> list:
     if triggered:
         _write_file(LEVEL_ALERTS_FILE, remaining)
     return triggered
+
+
+# ── Per-chat rate limiting ──────────────────────────────────────
+#
+# Anyone can talk to this bot, and every command costs at least one Gist read.
+# The GitHub API allows 5,000 authenticated requests an hour, shared with the
+# monitor — so a single chat spamming commands can burn the token's quota and
+# take the PRICE ALERTS down with it, which is the part nobody would notice
+# until a drop went unreported.
+#
+# The limits below are generous for a person tapping the /help keyboard and
+# hard for a script. A refused command costs one cached read and no write, so
+# a flood gets cheaper the longer it lasts rather than more expensive.
+
+RATE_WINDOW_SEC = 600        # rolling 10-minute window
+RATE_MAX_COMMANDS = 30       # any command
+RATE_MAX_EXTERNAL = 10       # commands that call a third-party service
+
+
+def _now_ts() -> float:
+    """Seconds since the epoch, via the module's clock so tests can fix it."""
+    return datetime.now(BANGKOK_TZ).timestamp()
+
+
+def _prune(record: dict, now: float) -> dict:
+    """Drop everything in `record` that has aged out of the window."""
+    cutoff = now - RATE_WINDOW_SEC
+    hits = [t for t in record.get("hits", []) if t > cutoff]
+    external = [t for t in record.get("external", []) if t > cutoff]
+    pruned = {"hits": hits, "external": external}
+    notified = record.get("notified_at")
+    if notified and notified > cutoff:
+        pruned["notified_at"] = notified
+    return pruned
+
+
+def allow_command(chat_id: str, external: bool = False) -> dict:
+    """May `chat_id` run another command right now? Records it if so.
+
+    Returns {"allowed", "notify", "retry_after"}. `notify` is True only the
+    FIRST refusal inside a window, so a flood gets one reply rather than one
+    per message — and so the refusal itself cannot be used to generate load.
+    """
+    now = _now_ts()
+    data = _read_file(RATE_LIMIT_FILE)
+    if not isinstance(data, dict):
+        data = {}
+
+    record = _prune(data.get(str(chat_id), {}), now)
+    over = (len(record["hits"]) >= RATE_MAX_COMMANDS
+            or (external and len(record["external"]) >= RATE_MAX_EXTERNAL))
+
+    if not over:
+        record["hits"].append(now)
+        if external:
+            record["external"].append(now)
+        record.pop("notified_at", None)
+        data[str(chat_id)] = record
+        _write_file(RATE_LIMIT_FILE, _compact(data, now))
+        return {"allowed": True, "notify": False, "retry_after": 0}
+
+    # Oldest relevant hit decides when the window frees up again.
+    relevant = record["external"] if external and record["external"] else record["hits"]
+    retry_after = max(1, int(RATE_WINDOW_SEC - (now - min(relevant))))
+
+    notify = "notified_at" not in record
+    if notify:
+        record["notified_at"] = now
+        data[str(chat_id)] = record
+        _write_file(RATE_LIMIT_FILE, _compact(data, now))
+    return {"allowed": False, "notify": notify, "retry_after": retry_after}
+
+
+def _compact(data: dict, now: float) -> dict:
+    """Drop chats with nothing left in the window, so the file stays bounded."""
+    out = {}
+    for cid, record in data.items():
+        pruned = _prune(record, now)
+        if pruned["hits"] or pruned["external"] or "notified_at" in pruned:
+            out[cid] = pruned
+    return out
 
 
 # ── Utility: create Gist if not exists ──────────────────────────
