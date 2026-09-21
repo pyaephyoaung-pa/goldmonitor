@@ -1,0 +1,84 @@
+name: Tests
+
+# Nothing ran the test suite before this: the other two workflows are the
+# monitor cron and the command poller, and main is not branch-protected. 363
+# tests existed and a pull request could land without any of them executing.
+#
+# Several of them guard failures that are silent in production and invisible in
+# review — that the i18n catalogue's placeholders match across all three
+# languages, that a rate-limited command performs no Gist write, that the
+# exported model still scores identically to scikit-learn. Those only help if
+# something runs them.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to the same branch makes the previous run irrelevant.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The code runs on both: the monitor and poller workflows pin 3.11,
+        # while Vercel's Python runtime serves the webhook on 3.12.
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        # requirements-dev.txt pulls in requirements-ml.txt, which pulls in
+        # requirements.txt — the model-export tests fit real sklearn models.
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        # The suite makes no network calls (verified with sockets blocked), so
+        # a failure here is a real failure, never a flaky feed.
+        run: pytest -q
+
+  runtime-imports:
+    name: Webhook imports without the ML extras
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ONLY the runtime requirements
+        run: pip install -r requirements.txt
+
+      - name: Import the webhook's module graph
+        # Vercel installs requirements.txt alone. A stray module-level
+        # `import numpy` anywhere in that graph would break the deployed
+        # webhook while pytest — which always has the extras installed —
+        # stayed green. pytest cannot catch this; only a clean env can.
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, ".")
+          import api.webhook  # noqa: F401 — pulls in bot_core and the rest
+          leaked = [m for m in ("numpy", "sklearn") if m in sys.modules]
+          assert not leaked, f"{leaked} reached the webhook's import path"
+          print("webhook module graph imports clean on runtime requirements")
+          PY
