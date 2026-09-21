@@ -43,6 +43,7 @@ Everything degrades to "no headlines" rather than erroring if both are down.
 from __future__ import annotations
 
 import html as html_module
+import json
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -61,18 +62,45 @@ GOOGLE_QUERY = '"gold price" OR "spot gold" OR bullion when:1d'
 # Google News serves some feeds only to browser-ish clients.
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; GoldMonitor/1.0)"}
 
-# Cap what we are willing to parse — the feed is untrusted input.
+# Cap what we are willing to download — the feed is untrusted input. Enforced
+# while READING (see _read_capped), because requests buffers the whole body
+# before returning unless the response is streamed: the old check ran after the
+# download it was meant to prevent, and covered only the RSS source.
 MAX_FEED_BYTES = 2_000_000
+
+# A DOCTYPE is the only way an XML document can define its own entities, and
+# ElementTree expands them — a few hundred bytes of nested definitions become
+# gigabytes in memory. MAX_FEED_BYTES cannot catch that: the payload is small
+# on the wire and only blows up during parsing. RSS needs no DOCTYPE, so refuse
+# any feed carrying one. Built-in entities (&amp;, &#8212;) are unaffected;
+# without a DOCTYPE a custom entity is simply an "undefined entity" parse error.
+_DOCTYPE_RE = re.compile(rb"<!\s*DOCTYPE", re.IGNORECASE)
 
 # Evergreen quote/chart pages that syndicate daily under a news-shaped headline
 # but carry no information: "Live Gold Price in CAD", "Gold Futures Streaming
 # Chart", per-country rate listings. Matched case-insensitively on the title.
 NOISE_MARKERS = (
-    "live gold price", "streaming chart", "price chart", "rates on ",
+    "live gold price", "streaming chart", "price chart",
     "gold rate today", "gold price today", "today gold price",
     "latest gold rate", "gold price in ", "gold rate in ",
-    "price in india", "closing price", "technical analysis for",
+    "price in india", "technical analysis for",
     "carat gold price", "22k", "24k",
+)
+
+# Two of those markers used to be plain substrings and were dropping exactly
+# the headlines this module exists to surface:
+#
+#   "rates on "     killed "Fed cuts rates on weak jobs data, gold rallies"
+#                   and "ECB holds rates on persistent inflation fears"
+#   "closing price" killed "Gold closing price sets fresh record after CPI"
+#
+# The spam they were aimed at is a DATE listing — "Gold Rates on 20-07-2026",
+# "MCX gold closing price today" — so require the date, not just the words.
+# "on <month>" is not something English prose says about anything but a date.
+_MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
+NOISE_PATTERNS = (
+    re.compile(rf"\brates? on (?:\d|{_MONTHS})", re.IGNORECASE),
+    re.compile(r"\bclosing price today\b", re.IGNORECASE),
 )
 
 # Structural rules, tuned against a live 100-item feed rather than guessed.
@@ -154,13 +182,16 @@ def _dedupe(articles: list) -> list:
 def is_noise(title: str) -> bool:
     """True for evergreen quote/chart pages masquerading as headlines.
 
-    Three passes: too short to be a headline, too many separators to be
-    anything but an aggregator label stack, or a known quote-page phrase.
+    Four passes: too short to be a headline, too many separators to be
+    anything but an aggregator label stack, a date-listing pattern, or a known
+    quote-page phrase.
     """
     text = (title or "").strip()
     if len(text) < MIN_TITLE_CHARS:
         return True
     if text.count("|") > MAX_TITLE_PIPES:
+        return True
+    if any(pattern.search(text) for pattern in NOISE_PATTERNS):
         return True
     lowered = text.lower()
     return any(marker in lowered for marker in NOISE_MARKERS)
@@ -179,19 +210,39 @@ def _split_google_title(raw: str) -> tuple:
     return raw.strip(), ""
 
 
+def _read_capped(response, source: str) -> bytes | None:
+    """Body bytes, or None if `source` sends more than MAX_FEED_BYTES.
+
+    Reads in chunks and stops, so an oversized body is never fully buffered —
+    which is the difference between capping a download and merely declining to
+    parse one that has already arrived.
+    """
+    body = bytearray()
+    for chunk in response.iter_content(64 * 1024):
+        body += chunk
+        if len(body) > MAX_FEED_BYTES:
+            print(f"[news] {source} feed too large "
+                  f"(over {MAX_FEED_BYTES} bytes) — ignoring")
+            return None
+    return bytes(body)
+
+
 def _fetch_google_news(limit: int) -> list:
     """Primary source. Returns raw dicts (unescaped) or [] on failure."""
     try:
-        r = requests.get(
+        with requests.get(
             GOOGLE_NEWS_RSS,
             params={"q": GOOGLE_QUERY, "hl": "en-US", "gl": "US", "ceid": "US:en"},
-            headers=_HEADERS, timeout=REQUEST_TIMEOUT,
-        )
-        r.raise_for_status()
-        if len(r.content) > MAX_FEED_BYTES:
-            print(f"[news] google feed too large ({len(r.content)} bytes) — ignoring")
+            headers=_HEADERS, timeout=REQUEST_TIMEOUT, stream=True,
+        ) as r:
+            r.raise_for_status()
+            body = _read_capped(r, "google")
+        if body is None:
             return []
-        root = ET.fromstring(r.content)
+        if _DOCTYPE_RE.search(body):
+            print("[news] google feed declares a DOCTYPE — refusing to parse it")
+            return []
+        root = ET.fromstring(body)
     except Exception as e:  # noqa: BLE001 — context is optional, never fatal
         print(f"[news] google news fetch failed: {e}")
         return []
@@ -227,19 +278,22 @@ def _parse_rfc822(raw: str):
 def _fetch_gdelt(query: str, limit: int, timespan: str) -> list:
     """Fallback source. Returns raw dicts (unescaped) or [] on failure."""
     try:
-        r = requests.get(
+        with requests.get(
             GDELT_URL,
             params={"query": query, "mode": "artlist", "maxrecords": 40,
                     "timespan": timespan, "format": "json", "sort": "datedesc"},
-            timeout=REQUEST_TIMEOUT,
-        )
-        r.raise_for_status()
+            timeout=REQUEST_TIMEOUT, stream=True,
+        ) as r:
+            r.raise_for_status()
+            body = _read_capped(r, "gdelt")
+        if body is None:
+            return []
         # GDELT answers overload and malformed queries with HTML or plain text
         # rather than a JSON error, so this cannot assume a parseable body.
         try:
-            payload = r.json()
+            payload = json.loads(body)
         except ValueError:
-            print(f"[news] non-JSON response from GDELT: {r.text[:120]!r}")
+            print(f"[news] non-JSON response from GDELT: {body[:120]!r}")
             return []
     except Exception as e:  # noqa: BLE001 — context is optional, never fatal
         print(f"[news] fetch failed: {e}")

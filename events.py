@@ -140,6 +140,13 @@ class Event:
         return (isinstance(other, Event) and self.type == other.type
                 and self.when_utc == other.when_utc)
 
+    def __hash__(self) -> int:
+        # Defining __eq__ alone sets __hash__ to None, which made Event
+        # unhashable: set(events) or a dict keyed by event raised TypeError.
+        # Nothing does that yet — this is here so that the first thing which
+        # tries it works, rather than discovering the trap.
+        return hash((self.type, self.when_utc))
+
 
 def _to_utc(date_str: str, hhmm: str) -> datetime | None:
     """Combine a US-Eastern date + time into an absolute UTC instant.

@@ -20,11 +20,33 @@ import storage
 UTC = pytz.UTC
 
 
-class _Resp:
+class _Streamed:
+    """news.py reads feeds with `with requests.get(..., stream=True)`, so the
+    doubles answer iter_content rather than handing over a whole body."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_content(self, chunk_size=1):
+        body = self._body()
+        for i in range(0, len(body), chunk_size):
+            yield body[i:i + chunk_size]
+
+
+class _Resp(_Streamed):
     def __init__(self, payload=None, text="", raise_exc=None):
         self._payload = payload
         self.text = text
         self._raise = raise_exc
+
+    def _body(self):
+        import json as _json
+        if self._payload is None:
+            return self.text.encode()
+        return _json.dumps(self._payload).encode()
 
     def raise_for_status(self):
         if self._raise:
@@ -298,10 +320,13 @@ RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel>
 </channel></rss>"""
 
 
-class _RssResp:
+class _RssResp(_Streamed):
     def __init__(self, content=RSS, status=200):
         self.content = content
         self.status_code = status
+
+    def _body(self):
+        return self.content
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -462,3 +487,105 @@ def test_keeps_real_market_coverage():
         "Indonesia's Bullion Banks Now Manage 153 Tons of Gold Worth $20 Billion",
     ]:
         assert not news.is_noise(t), f"should have been kept: {t}"
+
+
+# ── The noise filter must not eat the headlines it exists to show ──
+#
+# "rates on " and "closing price" were plain substring markers aimed at regional
+# date listings. They also matched ordinary macro copy — the exact stories this
+# module is for.
+
+def test_keeps_macro_headlines_that_mention_rates_on():
+    for t in [
+        "Fed cuts rates on weak jobs data, gold rallies",
+        "ECB holds rates on persistent inflation fears",
+        "BoJ decides rates on a knife edge as yen slides",
+        "Gold closing price sets fresh record after CPI",
+    ]:
+        assert not news.is_noise(t), f"should have been kept: {t}"
+
+
+def test_still_filters_the_date_listings_those_markers_targeted():
+    for t in [
+        "Gold Rates on 20-07-2026 in Hyderabad",
+        "Gold price in Saudi Arabia: Rates on August 14",
+        "Gold Rate on 20 July 2026, Chennai",
+        "MCX gold closing price today 20-07-2026",
+    ]:
+        assert news.is_noise(t), f"should have been filtered: {t}"
+
+
+# ── Feed safety ─────────────────────────────────────────────────
+
+def test_entity_expansion_bomb_is_refused(monkeypatch, capsys):
+    """A few hundred bytes of nested entities expand to gigabytes in
+    ElementTree. MAX_FEED_BYTES cannot catch it — the payload is small on the
+    wire — so a DOCTYPE, which is the only way to declare them, is refused."""
+    bomb = (b'<?xml version="1.0"?><!DOCTYPE lolz [\n'
+            b' <!ENTITY a "AAAAAAAAAA">\n'
+            b' <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">\n'
+            b' <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
+            b"<rss><channel><item><title>&c;</title></item></channel></rss>")
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp(bomb))
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+
+    assert news.fetch_headlines() == []
+    assert "DOCTYPE" in capsys.readouterr().out
+
+
+def test_ordinary_entities_still_parse(monkeypatch):
+    """The DOCTYPE rule must not break normal feeds: &amp; and &#8212; are
+    built in and need no declaration."""
+    feed = ('<?xml version="1.0"?><rss><channel><item>'
+            "<title>Gold, oil &amp; the dollar &#8212; Fed in focus</title>"
+            "<link>https://example.com/a</link>"
+            "<pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>"
+            "</item></channel></rss>").encode()
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _RssResp(feed))
+
+    out = news.fetch_headlines(limit=5)
+
+    assert len(out) == 1
+    assert "&amp;" in out[0]["title"]      # escaped once, for Telegram
+    assert "—" in out[0]["title"]
+
+
+def test_oversized_body_is_not_fully_buffered(monkeypatch, capsys):
+    """The cap has to bite while READING. requests buffers the whole body
+    before returning unless the response is streamed, so the old check ran
+    after the download it was meant to prevent."""
+    read = []
+
+    class _Huge(_Streamed):
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, chunk_size=1):
+            while True:
+                read.append(chunk_size)
+                yield b"x" * chunk_size
+
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _Huge())
+    monkeypatch.setattr(news, "_fetch_gdelt", lambda q, l, t: [])
+
+    assert news.fetch_headlines() == []
+    assert "too large" in capsys.readouterr().out
+    # Stopped early rather than reading an endless body.
+    assert sum(read) <= news.MAX_FEED_BYTES + 64 * 1024
+
+
+def test_gdelt_is_capped_too(monkeypatch, capsys):
+    """It had no size limit at all — only the RSS source was checked."""
+    class _Huge(_Streamed):
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, chunk_size=1):
+            for _ in range((news.MAX_FEED_BYTES // chunk_size) + 2):
+                yield b"x" * chunk_size
+
+    monkeypatch.setattr(news, "_fetch_google_news", lambda limit: [])
+    monkeypatch.setattr(news.requests, "get", lambda *a, **k: _Huge())
+
+    assert news.fetch_headlines() == []
+    assert "gdelt feed too large" in capsys.readouterr().out
