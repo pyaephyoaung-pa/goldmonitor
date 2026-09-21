@@ -30,7 +30,7 @@ import regime
 import goldapi
 import bot_core
 import signals
-from gold_format import fmt, fmt_target, fmt_usd, gold_breakdown
+from gold_format import fmt, fmt_target, fmt_usd, change_arrow, gold_breakdown
 
 # ── Config ──────────────────────────────────────────────────────
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
@@ -42,7 +42,13 @@ RISE_THRESHOLD = float(os.environ.get("RISE_THRESHOLD", "0.5"))
 # noise from the normal open-to-open drift.
 GAP_THRESHOLD = float(os.environ.get("GAP_THRESHOLD", "1.0"))
 
-# Try to load thresholds from bot state (user-configurable via /setthreshold, /setrisethreshold)
+# Thresholds are user-configurable via /setthreshold and /setrisethreshold.
+#
+# Bound BEFORE the try: main() passes _bot_state to the webhook watchdog at the
+# very end of a run, so a failure here used to raise NameError there instead —
+# disabling the one check that notices a webhook silently swallowing every
+# command, and disabling it precisely when storage was already misbehaving.
+_bot_state: dict = {}
 try:
     _bot_state = storage.load_bot_state()
     if "drop_threshold" in _bot_state:
@@ -51,8 +57,11 @@ try:
         RISE_THRESHOLD = _bot_state["rise_threshold"]
     if "gap_threshold" in _bot_state:
         GAP_THRESHOLD = _bot_state["gap_threshold"]
-except Exception:
-    pass
+except Exception as e:
+    # Falling back to the defaults silently means the owner's /setthreshold is
+    # ignored and the alert levels move, with nothing to say why.
+    print(f"[monitor] could not load thresholds, using defaults "
+          f"(drop {DROP_THRESHOLD}%, rise {RISE_THRESHOLD}%): {e}")
 
 
 # ── Telegram Notify ─────────────────────────────────────────────
@@ -163,7 +172,7 @@ def build_weekly_block(history: list, lang: str | None = None) -> str:
 
     return i18n.t(
         "monitor.weekly", lang,
-        arrow="📈" if week_change >= 0 else "📉",
+        arrow=change_arrow(week_change),
         change=week_change, open=fmt_usd(week_open), close=fmt_usd(week_close),
         high=fmt_usd(max(prices)), low=fmt_usd(min(prices)),
         best_day=best[5:], best=day_moves[best],
@@ -449,8 +458,11 @@ def main():
 
     # ── Evening Summary (8pm BKK; window to 11:55pm absorbs Actions delays) ──
     if 20 <= hour <= 23 and not state.get("evening_sent"):
-        change = -d
-        arrow = "📈" if change > 0 else "📉"
+        # Not -d: negating a zero drop gives -0.0, which renders as "-0.00%"
+        # right next to the flat arrow. The rise from the open is the same
+        # number and says what it means.
+        change = rise_pct(state["open_price"], thb_gram)
+        arrow = change_arrow(change)
 
         pnl = storage.get_portfolio_pnl(thb_gram)
 

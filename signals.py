@@ -23,6 +23,7 @@ from __future__ import annotations
 import requests
 
 import i18n
+from gold_format import change_arrow
 
 # Stooq primary tickers (kept for reference).
 SYMBOLS = {
@@ -227,17 +228,11 @@ def gold_bias(macro: dict, lang: str | None = None) -> str | None:
     return i18n.t("macro.bias.mixed", lang)
 
 
-def _arrow(chg):
-    if chg is None:
-        return "➡️"
-    return "📈" if chg > 0 else "📉" if chg < 0 else "➡️"
-
-
 def _line(emoji, label, metric):
     val = metric.get("value")
     chg = metric.get("change_pct")
     chg_str = f" ({chg:+.2f}%)" if chg is not None else ""
-    return f"  {emoji} {label}: {val}{chg_str} {_arrow(chg)}"
+    return f"  {emoji} {label}: {val}{chg_str} {change_arrow(chg)}"
 
 
 def _line_yield(emoji, label, metric):
@@ -245,8 +240,8 @@ def _line_yield(emoji, label, metric):
     val = metric.get("value")
     abs_chg = metric.get("change_abs")
     if abs_chg is not None:
-        return f"  {emoji} {label}: {val}% ({abs_chg:+.2f}pp) {_arrow(abs_chg)}"
-    return f"  {emoji} {label}: {val}% {_arrow(None)}"
+        return f"  {emoji} {label}: {val}% ({abs_chg:+.2f}pp) {change_arrow(abs_chg)}"
+    return f"  {emoji} {label}: {val}% {change_arrow(None)}"
 
 
 def format_macro_block(macro: dict | None = None, lang: str | None = None) -> str:

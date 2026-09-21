@@ -36,6 +36,19 @@ def fmt_target(price, unit: str) -> str:
     return f"{fmt_usd(price)}/oz" if unit == "usd" else f"{fmt(price)}/g"
 
 
+def change_arrow(change) -> str:
+    """📈 / 📉 / ➡️ for a change value. Flat — or unknown — is ➡️.
+
+    Six call sites spelled this inline and three of them disagreed: the chart
+    caption and the weekly recap showed an unchanged price as a RISE, while the
+    evening summary showed it as a FALL. Gold really can close a day flat to
+    the satang, so all three were reachable.
+    """
+    if change is None:
+        return "➡️"
+    return "📈" if change > 0 else "📉" if change < 0 else "➡️"
+
+
 def usd_oz_suffix(usd_oz) -> str:
     """Format spot as ' | $3,352.41/oz', to sit next to a THB/gram figure.
 

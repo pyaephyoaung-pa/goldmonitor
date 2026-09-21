@@ -32,7 +32,8 @@ import predictor
 import regime
 import goldapi
 import signals
-from gold_format import fmt, fmt_target, fmt_usd, gold_breakdown, usd_oz_suffix
+from gold_format import (fmt, fmt_target, fmt_usd, change_arrow,
+                         gold_breakdown, usd_oz_suffix)
 
 BANGKOK_TZ = pytz.timezone("Asia/Bangkok")
 TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -387,7 +388,7 @@ def cmd_price(chat_id: str, lang: str):
         for key, label in [("change_1h", "1h"), ("change_4h", "4h"),
                            ("change_24h", "24h"), ("change_7d", "7d")]:
             if key in trend:
-                arrow = "📈" if trend[key] > 0 else "📉" if trend[key] < 0 else "➡️"
+                arrow = change_arrow(trend[key])
                 lines.append(f"  {arrow} {label}: {trend[key]:+.3f}%")
 
     if len(history) >= 14:
@@ -520,7 +521,7 @@ def cmd_chart(chat_id: str, args: str, lang: str):
     caption = i18n.t(
         "chart.caption", lang,
         days=days, now=fmt(prices[-1]), usd=usd_oz_suffix(points[-1].get("usd_oz")),
-        arrow="📈" if change >= 0 else "📉",
+        arrow=change_arrow(change),
         change=change, high=fmt(max(prices)), low=fmt(min(prices)),
     )
     resp = send_photo(url, caption, chat_id)
@@ -837,7 +838,7 @@ def cmd_history(chat_id: str, args: str, lang: str):
         p = daily[date]["prices"]
         high, low, close, opn = max(p), min(p), p[-1], p[0]
         change = ((close - opn) / opn) * 100
-        arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+        arrow = change_arrow(change)
         # usd_oz is 0 for pre-v2 entries that predate the field — the suffix
         # falls away rather than printing "$0/oz".
         lines.append(
