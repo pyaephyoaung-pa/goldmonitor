@@ -320,3 +320,14 @@ def test_estimated_events_are_marked(monkeypatch):
     nfp = events.upcoming(now, limit=1)[0]
     line = bot_core.format_event_line(nfp, now, "en")
     assert "estimated" in line
+
+
+def test_events_can_go_in_a_set():
+    """__eq__ without __hash__ makes a class unhashable in Python 3, so
+    set(events) or a dict keyed by event used to raise TypeError."""
+    when = events._to_utc("2026-10-28", "14:00")
+    a, b = events.Event("fomc", when), events.Event("fomc", when)
+    other = events.Event("nfp", when)
+
+    assert a == b and hash(a) == hash(b)
+    assert len({a, b, other}) == 2
