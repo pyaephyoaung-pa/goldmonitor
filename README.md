@@ -512,7 +512,7 @@ goldmonitor/
 > auto-disables when a webhook is configured — the two no longer conflict. Use
 > the webhook as primary; polling is the keyless fallback.
 
-> 🧪 **Tests:** `pip install -r requirements-dev.txt && pytest`
+> 🧪 **Tests:** `pip install -r requirements-dev.txt && pytest` — also run in CI on every pull request and push to `main`, on Python 3.11 and 3.12.
 
 ---
 ---
@@ -793,4 +793,4 @@ goldmonitor/
 > auto-disables when a webhook is configured — the two no longer conflict. Use
 > the webhook as primary; polling is the keyless fallback.
 
-> 🧪 **Tests:** `pip install -r requirements-dev.txt && pytest`
+> 🧪 **Tests:** `pip install -r requirements-dev.txt && pytest` — also run in CI on every pull request and push to `main`, on Python 3.11 and 3.12.
