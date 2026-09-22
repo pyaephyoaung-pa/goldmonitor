@@ -22,9 +22,13 @@ which is a fact, not an opinion.
     into correctness — a wrong date makes the warnings worse than useless.
 
     STATUS: FOMC verified against federalreserve.gov on 2026-08-14, covering
-    the rest of 2026 and all of 2027. CPI and PCE are NOT in the table —
-    bls.gov and bea.gov return 403 to automated clients, so those have to be
-    added by hand.
+    the rest of 2026 and all of 2027. PCE verified against bea.gov on
+    2026-09-22, covering the rest of 2026. CPI is still NOT in the table.
+
+    bea.gov now serves automated clients — the older note here said it 403s,
+    which is no longer true. bls.gov still refuses them on every route tried
+    (the schedule pages, the yearly index and the RSS feed all return 403), so
+    CPI has to be read in a browser.
 
     FOMC : https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     CPI  : https://www.bls.gov/schedule/news_release/cpi.htm
@@ -94,11 +98,27 @@ CALENDAR = [
     ("2027-10-27", "fomc"),
     ("2027-12-08", "fomc"),
 
-    # ── CPI / PCE — STILL MISSING ──
-    # bls.gov and bea.gov block automated fetches (HTTP 403), so these could
-    # not be verified programmatically. Add them by hand from the schedules
-    # linked above; until then the calendar covers FOMC only, and CPI/PCE
-    # releases will pass without a warning.
+    # ── PCE 2026 — VERIFIED against bea.gov/news/schedule on 2026-09-22 ──
+    # The release is "Personal Income and Outlays", 08:30 ET, which is what
+    # carries the PCE price index.
+    #
+    # READ THE DATE COLUMN, NOT THE TITLE. The month in BEA's title is the
+    # REFERENCE month — "Personal Income and Outlays, August 2026" ships on
+    # 30 September. Pairing titles with the wrong row is an easy mistake and
+    # puts every warning on the wrong day.
+    ("2026-09-30", "pce"),   # August 2026 data
+    ("2026-10-29", "pce"),   # September 2026 data
+    ("2026-11-25", "pce"),   # October 2026 data
+    ("2026-12-23", "pce"),   # November 2026 data
+
+    # ── CPI — STILL MISSING ──
+    # bls.gov returns 403 to automated clients on every route, so these have to
+    # be copied by hand from the schedule linked above, in the same
+    # ("YYYY-MM-DD", "cpi") form. Do not guess them: a release warning on the
+    # wrong day is worse than no warning at all.
+    #
+    # This is the biggest remaining gap in the table — CPI moves gold about as
+    # hard as an FOMC decision does.
 ]
 
 # Some releases follow a published rule rather than an ad-hoc date, so they can

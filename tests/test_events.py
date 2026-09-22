@@ -331,3 +331,53 @@ def test_events_can_go_in_a_set():
 
     assert a == b and hash(a) == hash(b)
     assert len({a, b, other}) == 2
+
+
+# ── CALENDAR integrity ──────────────────────────────────────────
+#
+# This table is maintained by hand from official schedules, so the realistic
+# failure is a transcription slip — a typo'd date, a duplicated line, an event
+# type that does not exist. None of that raises on import; it just puts a
+# warning on the wrong day, or silently never fires.
+
+def test_every_calendar_entry_is_usable():
+    for date_str, type_ in events.CALENDAR:
+        assert type_ in events.EVENT_TYPES, f"unknown event type {type_!r}"
+        assert events._to_utc(date_str, events.EVENT_TYPES[type_]["time"]) is not None, \
+            f"unparseable date {date_str!r}"
+
+
+def test_no_duplicate_calendar_entries():
+    assert len(set(events.CALENDAR)) == len(events.CALENDAR)
+
+
+def test_all_events_come_back_in_order():
+    whens = [e.when_utc for e in events.all_events()]
+    assert whens == sorted(whens)
+
+
+def test_every_event_type_has_a_label_in_every_language():
+    import i18n
+    for spec in events.EVENT_TYPES.values():
+        entry = i18n.STRINGS.get(spec["key"])
+        assert entry, f"missing i18n key {spec['key']}"
+        for code in i18n.LANGUAGES:
+            assert entry.get(code), f"{spec['key']} has no {code}"
+
+
+# ── PCE ─────────────────────────────────────────────────────────
+
+def test_pce_releases_are_in_the_calendar():
+    """They were missing entirely, so PCE passed without a warning."""
+    assert any(t == "pce" for _, t in events.CALENDAR)
+
+
+def test_pce_lands_at_0830_eastern_across_the_dst_switch():
+    """08:30 ET is 19:30 BKK in EDT and 20:30 BKK in EST. Getting this from
+    localize() rather than a fixed offset is what keeps it right year-round."""
+    import pytz
+    pce = [e for e in events.all_events() if e.type == "pce"]
+    assert pce, "no PCE entries to check"
+    for e in pce:
+        eastern = e.when(pytz.timezone("US/Eastern"))
+        assert (eastern.hour, eastern.minute) == (8, 30), eastern
