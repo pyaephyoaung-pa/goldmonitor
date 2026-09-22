@@ -331,3 +331,93 @@ def test_events_can_go_in_a_set():
 
     assert a == b and hash(a) == hash(b)
     assert len({a, b, other}) == 2
+
+
+# ── CALENDAR integrity ──────────────────────────────────────────
+#
+# This table is maintained by hand from official schedules, so the realistic
+# failure is a transcription slip — a typo'd date, a duplicated line, an event
+# type that does not exist. None of that raises on import; it just puts a
+# warning on the wrong day, or silently never fires.
+
+def test_every_calendar_entry_is_usable():
+    for date_str, type_ in events.CALENDAR:
+        assert type_ in events.EVENT_TYPES, f"unknown event type {type_!r}"
+        assert events._to_utc(date_str, events.EVENT_TYPES[type_]["time"]) is not None, \
+            f"unparseable date {date_str!r}"
+
+
+def test_no_duplicate_calendar_entries():
+    assert len(set(events.CALENDAR)) == len(events.CALENDAR)
+
+
+def test_all_events_come_back_in_order():
+    whens = [e.when_utc for e in events.all_events()]
+    assert whens == sorted(whens)
+
+
+def test_every_event_type_has_a_label_in_every_language():
+    import i18n
+    for spec in events.EVENT_TYPES.values():
+        entry = i18n.STRINGS.get(spec["key"])
+        assert entry, f"missing i18n key {spec['key']}"
+        for code in i18n.LANGUAGES:
+            assert entry.get(code), f"{spec['key']} has no {code}"
+
+
+# ── PCE ─────────────────────────────────────────────────────────
+
+def test_pce_releases_are_in_the_calendar():
+    """They were missing entirely, so PCE passed without a warning."""
+    assert any(t == "pce" for _, t in events.CALENDAR)
+
+
+def test_pce_lands_at_0830_eastern_across_the_dst_switch():
+    """08:30 ET is 19:30 BKK in EDT and 20:30 BKK in EST. Getting this from
+    localize() rather than a fixed offset is what keeps it right year-round."""
+    import pytz
+    pce = [e for e in events.all_events() if e.type == "pce"]
+    assert pce, "no PCE entries to check"
+    for e in pce:
+        eastern = e.when(pytz.timezone("US/Eastern"))
+        assert (eastern.hour, eastern.minute) == (8, 30), eastern
+
+
+# ── Generated NFP must never shadow a verified one ──────────────
+
+def test_generated_nfp_skips_months_the_calendar_covers():
+    """The first-Friday rule is an approximation — checked against BLS's
+    published 2026 schedule it is wrong in 4 months of 12, by up to a week.
+    Where a real date exists it has to win, and the estimate must not sit
+    beside it as a second, wrong event on the wrong day."""
+    import pytz
+    verified = events._verified_nfp_months()
+    assert verified, "no hand-verified NFP dates to test against"
+
+    year, month = sorted(verified)[0]
+    now = pytz.UTC.localize(datetime(year, month, 1))
+    generated = events._generated_nfp(now)
+
+    for e in generated:
+        bkk = e.when_utc.astimezone(events.EASTERN)
+        assert (bkk.year, bkk.month) not in verified, \
+            f"generated an estimate for {bkk:%Y-%m}, which is verified"
+
+
+def test_no_month_has_two_nfp_events():
+    """The failure this guards is a duplicate pair a day or a week apart —
+    one real, one estimated — both firing a 'NFP in 2h' warning."""
+    import pytz
+    from collections import Counter
+    now = pytz.UTC.localize(datetime(2026, 9, 22))
+    months = Counter()
+    for e in events.all_events() + events._generated_nfp(now):
+        if e.type == "nfp":
+            at = e.when_utc.astimezone(events.EASTERN)
+            months[(at.year, at.month)] += 1
+    dupes = {k: v for k, v in months.items() if v > 1}
+    assert not dupes, f"more than one NFP in {dupes}"
+
+
+def test_verified_events_are_not_flagged_estimated():
+    assert all(not e.estimated for e in events.all_events())
