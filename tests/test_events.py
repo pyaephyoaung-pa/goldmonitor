@@ -381,3 +381,43 @@ def test_pce_lands_at_0830_eastern_across_the_dst_switch():
     for e in pce:
         eastern = e.when(pytz.timezone("US/Eastern"))
         assert (eastern.hour, eastern.minute) == (8, 30), eastern
+
+
+# ── Generated NFP must never shadow a verified one ──────────────
+
+def test_generated_nfp_skips_months_the_calendar_covers():
+    """The first-Friday rule is an approximation — checked against BLS's
+    published 2026 schedule it is wrong in 4 months of 12, by up to a week.
+    Where a real date exists it has to win, and the estimate must not sit
+    beside it as a second, wrong event on the wrong day."""
+    import pytz
+    verified = events._verified_nfp_months()
+    assert verified, "no hand-verified NFP dates to test against"
+
+    year, month = sorted(verified)[0]
+    now = pytz.UTC.localize(datetime(year, month, 1))
+    generated = events._generated_nfp(now)
+
+    for e in generated:
+        bkk = e.when_utc.astimezone(events.EASTERN)
+        assert (bkk.year, bkk.month) not in verified, \
+            f"generated an estimate for {bkk:%Y-%m}, which is verified"
+
+
+def test_no_month_has_two_nfp_events():
+    """The failure this guards is a duplicate pair a day or a week apart —
+    one real, one estimated — both firing a 'NFP in 2h' warning."""
+    import pytz
+    from collections import Counter
+    now = pytz.UTC.localize(datetime(2026, 9, 22))
+    months = Counter()
+    for e in events.all_events() + events._generated_nfp(now):
+        if e.type == "nfp":
+            at = e.when_utc.astimezone(events.EASTERN)
+            months[(at.year, at.month)] += 1
+    dupes = {k: v for k, v in months.items() if v > 1}
+    assert not dupes, f"more than one NFP in {dupes}"
+
+
+def test_verified_events_are_not_flagged_estimated():
+    assert all(not e.estimated for e in events.all_events())

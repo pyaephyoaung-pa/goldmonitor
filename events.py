@@ -22,13 +22,16 @@ which is a fact, not an opinion.
     into correctness — a wrong date makes the warnings worse than useless.
 
     STATUS: FOMC verified against federalreserve.gov on 2026-08-14, covering
-    the rest of 2026 and all of 2027. PCE verified against bea.gov on
-    2026-09-22, covering the rest of 2026. CPI is still NOT in the table.
+    the rest of 2026 and all of 2027. CPI, NFP and PCE verified on 2026-09-22
+    against bls.gov and bea.gov, covering the rest of 2026.
 
-    bea.gov now serves automated clients — the older note here said it 403s,
-    which is no longer true. bls.gov still refuses them on every route tried
-    (the schedule pages, the yearly index and the RSS feed all return 403), so
-    CPI has to be read in a browser.
+    bea.gov serves automated clients; bls.gov returns 403 to curl on every
+    route (schedule pages, yearly index, RSS) but loads normally in a browser,
+    which is how its dates were read. An older note here said both 403 — that
+    was true of bea.gov once and is not any more.
+
+    BLS has not published a 2027 schedule yet, so 2027 NFP falls back to the
+    generated first-Friday estimate until it does.
 
     FOMC : https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     CPI  : https://www.bls.gov/schedule/news_release/cpi.htm
@@ -111,14 +114,23 @@ CALENDAR = [
     ("2026-11-25", "pce"),   # October 2026 data
     ("2026-12-23", "pce"),   # November 2026 data
 
-    # ── CPI — STILL MISSING ──
-    # bls.gov returns 403 to automated clients on every route, so these have to
-    # be copied by hand from the schedule linked above, in the same
-    # ("YYYY-MM-DD", "cpi") form. Do not guess them: a release warning on the
-    # wrong day is worse than no warning at all.
+    # ── CPI 2026 — VERIFIED against bls.gov/schedule/news_release/cpi.htm
+    #    on 2026-09-22. 08:30 ET. Dates are RELEASE dates; the reference month
+    #    is the month before.
+    ("2026-10-14", "cpi"),   # September 2026 data
+    ("2026-11-10", "cpi"),   # October 2026 data
+    ("2026-12-10", "cpi"),   # November 2026 data
+
+    # ── NFP 2026 — VERIFIED against bls.gov/schedule/news_release/empsit.htm
+    #    on 2026-09-22. 08:30 ET.
     #
-    # This is the biggest remaining gap in the table — CPI moves gold about as
-    # hard as an FOMC decision does.
+    # These are here because the first-Friday RULE below is not reliable
+    # enough: checked against BLS's published 2026 schedule it is wrong in 4
+    # months of 12, by up to a week. A hand-verified date always wins over a
+    # generated one (see _verified_nfp_months).
+    ("2026-10-02", "nfp"),   # September 2026 data
+    ("2026-11-06", "nfp"),   # October 2026 data
+    ("2026-12-04", "nfp"),   # November 2026 data
 ]
 
 # Some releases follow a published rule rather than an ad-hoc date, so they can
@@ -197,14 +209,36 @@ def _first_friday(year: int, month: int) -> datetime | None:
 NFP_MONTHS_AHEAD = 2
 
 
+def _verified_nfp_months() -> set:
+    """(year, month) pairs where CALENDAR carries a hand-verified NFP date."""
+    out = set()
+    for date_str, type_ in CALENDAR:
+        if type_ != "nfp":
+            continue
+        try:
+            y, m, _ = (int(part) for part in date_str.split("-"))
+        except ValueError:
+            continue
+        out.add((y, m))
+    return out
+
+
 def _generated_nfp(now: datetime, months: int = NFP_MONTHS_AHEAD) -> list:
-    """First-Friday NFP estimates for the next few months."""
+    """First-Friday NFP estimates for the next few months.
+
+    Months already in CALENDAR are skipped: the rule is only an approximation
+    — against BLS's published 2026 schedule it is wrong in 4 months of 12, by
+    as much as a week — so wherever a real date exists it must win, and the
+    estimate must not sit alongside it as a second, wrong event.
+    """
+    verified = _verified_nfp_months()
     out = []
     year, month = now.year, now.month
     for _ in range(months + 1):
-        when = _first_friday(year, month)
-        if when is not None:
-            out.append(Event("nfp", when, estimated=True))
+        if (year, month) not in verified:
+            when = _first_friday(year, month)
+            if when is not None:
+                out.append(Event("nfp", when, estimated=True))
         month += 1
         if month > 12:
             year, month = year + 1, 1
