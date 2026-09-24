@@ -182,3 +182,17 @@ def test_the_webhook_watchdog_still_runs_after_the_ml_block(monkeypatch):
                   watchdog=lambda st: bool(checked.append(1)))
 
     assert checked == [1]
+
+
+def test_a_null_ml_warned_on_still_warns(monkeypatch):
+    """model_data.json holds nulls by design ("last_trained": None on a fresh
+    file). A key stored as null came back from .get() as None, and None[:10]
+    raised TypeError — in the one branch whose job is to raise the alarm."""
+    monkeypatch.setattr(predictor, "ml_available", lambda: False)
+    store = _store_with_history()
+    store[storage.MODEL_DATA_FILE] = {"ml_warned_on": None, "last_trained": None}
+
+    sent, files = _training_run(monkeypatch, store)
+
+    assert any("requirements-ml.txt" in m for m in sent), sent
+    assert files[storage.MODEL_DATA_FILE]["ml_warned_on"] == "2026-06-18"
