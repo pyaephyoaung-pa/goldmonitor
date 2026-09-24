@@ -755,7 +755,10 @@ def cmd_portfolio(chat_id: str, lang: str):
         return
 
     pnl = storage.get_portfolio_pnl(thb_gram)
-    if pnl["num_buys"] == 0 and pnl["num_sells"] == 0:
+    skipped = pnl.get("skipped_rows", [])
+    # A ledger holding ONLY unreadable rows is not empty — saying so would hide
+    # exactly the entries the owner needs to fix.
+    if pnl["num_buys"] == 0 and pnl["num_sells"] == 0 and not skipped:
         send_message(i18n.t("portfolio.empty", lang), chat_id)
         return
 
@@ -787,20 +790,37 @@ def cmd_portfolio(chat_id: str, lang: str):
     lines.append(i18n.t("portfolio.total", lang, emoji=profit_emoji,
                         value=fmt(pnl["pnl_thb"]), pct=pnl["pnl_pct"]))
 
+    if skipped:
+        lines.append(i18n.t("portfolio.skipped_rows", lang,
+                            rows=", ".join(f"#{n}" for n in skipped)))
+
     if pnl["entries"]:
-        total_entries = pnl["num_buys"] + pnl["num_sells"]
+        # Number each row by its REAL position in the ledger, because /edit and
+        # /delete take that number. num_buys + num_sells only matched it while
+        # every row was counted as one or the other — unreadable ones included.
+        # Once those are left out of the counts, every number after one shifts,
+        # and /delete removes the wrong entry.
+        total_entries = pnl.get("total_entries", len(pnl["entries"]))
         start_idx = max(1, total_entries - len(pnl["entries"]) + 1)
         lines.append(i18n.t("portfolio.recent", lang))
         for i, e in enumerate(pnl["entries"]):
-            idx = start_idx + i
-            ts = e["ts"][:10]
-            is_buy = e.get("type", "buy") == "buy"
-            icon = "🟢" if is_buy else "🔴"
-            label = i18n.t("entry.buy" if is_buy else "entry.sell", lang)
-            lines.append(f"  {icon} #{idx} {label} {ts}: "
-                         f"{fmt(e['amount_thb'])} @ {fmt(e['price_per_gram'])}/g")
+            lines.append(_ledger_line(e, start_idx + i, lang))
 
     send_message("\n".join(lines), chat_id)
+
+
+def _ledger_line(e, idx: int, lang: str) -> str:
+    """One /portfolio ledger row. Never raises — this is where an unreadable row
+    has to be SHOWN, with the number that fixes it, not crash the command."""
+    if not storage.entry_is_usable(e):
+        return f"  ⚠️ #{idx} " + i18n.t("portfolio.unreadable_entry", lang)
+    is_buy = e.get("type", "buy") == "buy"
+    icon = "🟢" if is_buy else "🔴"
+    label = i18n.t("entry.buy" if is_buy else "entry.sell", lang)
+    ts = str(e.get("ts") or "")[:10]
+    price = e.get("price_per_gram")
+    at = f"{fmt(price)}/g" if storage._finite_number(price) else "?"
+    return f"  {icon} #{idx} {label} {ts}: {fmt(e['amount_thb'])} @ {at}"
 
 
 def cmd_history(chat_id: str, args: str, lang: str):
