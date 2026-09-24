@@ -560,7 +560,11 @@ def main():
                 # back to TA for good. Tell the owner, once a day while broken.
                 print("[ML] numpy/scikit-learn missing — cannot train. "
                       "Does this job install requirements-ml.txt?")
-                if TG_CHAT_ID and model_data.get("ml_warned_on", "")[:10] != today:
+                # `or ""`, not a .get() default: a key stored as null comes back
+                # as None, and model_data.json already holds nulls by design
+                # ("last_trained": None on a fresh file) — so None[:10] would
+                # raise TypeError in the one branch that exists to warn.
+                if TG_CHAT_ID and (model_data.get("ml_warned_on") or "")[:10] != today:
                     bot_core.send_message(
                         i18n.t("monitor.ml_deps_missing",
                                storage.get_user_lang(TG_CHAT_ID)), TG_CHAT_ID)
