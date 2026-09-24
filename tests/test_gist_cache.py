@@ -13,8 +13,9 @@ import storage
 class _FakeGist:
     """Counts full-Gist downloads and lets a test change what they return."""
 
-    def __init__(self, monkeypatch, files=None):
+    def __init__(self, monkeypatch, files=None, down=False):
         self.files = files if files is not None else {}
+        self.down = down                 # the request FAILS, as in an outage
         self.fetches = 0
         monkeypatch.setattr(storage, "_get_gist", self._get)
         monkeypatch.setattr(storage, "GITHUB_TOKEN", "t")
@@ -22,6 +23,8 @@ class _FakeGist:
 
     def _get(self):
         self.fetches += 1
+        if self.down:
+            return None
         return {name: {"content": json.dumps(value)}
                 for name, value in self.files.items()}
 
@@ -69,14 +72,38 @@ def test_reset_cache_forces_a_refetch(monkeypatch):
 
 # ── Rule 1: never cache a failed or empty fetch ─────────────────
 
-def test_failed_fetch_is_not_cached(monkeypatch):
-    """Caching an outage would make every later read in the run see 'no data'
-    — and a caller that then wrote would persist that over real data."""
-    gist = _FakeGist(monkeypatch, {})          # outage: no files come back
+def test_a_failed_fetch_is_remembered_for_the_run(monkeypatch):
+    """Retrying on every read never protected anything — the FIRST failed read
+    already hands callers an empty container — it only multiplied requests
+    during an outage. The overwrite risk is closed by the write guard instead."""
+    gist = _FakeGist(monkeypatch, down=True)
 
-    assert storage.load_bot_state() == {"update_offset": 0, "drop_threshold": 0.5}
+    for _ in range(5):
+        assert storage.load_bot_state() == {"update_offset": 0, "drop_threshold": 0.5}
+
+    assert gist.fetches == 1
+
+
+def test_the_next_run_tries_again(monkeypatch):
+    gist = _FakeGist(monkeypatch, down=True)
+    storage.load_bot_state()
+
+    gist.down = False
     gist.set(storage.BOT_STATE_FILE, {"update_offset": 9})
-    assert storage.load_bot_state()["update_offset"] == 9   # retried, not stuck
+    storage.reset_cache()                       # a new logical run
+
+    assert storage.load_bot_state()["update_offset"] == 9
+    assert gist.fetches == 2
+
+
+def test_an_empty_but_reachable_gist_is_not_cached(monkeypatch):
+    """Not an outage — the request worked and returned nothing, which a real
+    Gist never does. It is not remembered, so a later read looks again."""
+    gist = _FakeGist(monkeypatch, {})
+
+    storage.load_bot_state()
+    gist.set(storage.BOT_STATE_FILE, {"update_offset": 9})
+    assert storage.load_bot_state()["update_offset"] == 9
 
     assert gist.fetches == 2
 
