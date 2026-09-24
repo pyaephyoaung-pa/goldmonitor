@@ -34,8 +34,13 @@ HEADERS = {
 
 
 # ── Low-level Gist I/O ─────────────────────────────────────────
-def _get_gist() -> dict:
-    """Fetch the entire Gist."""
+def _get_gist() -> dict | None:
+    """Fetch the entire Gist: its files, or None if the request FAILED.
+
+    None is not {}. {} means "the Gist has nothing in it"; None means "we do
+    not know what is in it". Every read-modify-write below depends on telling
+    those apart — see the write guard in _writes_blocked.
+    """
     if not GITHUB_TOKEN or not GIST_ID:
         return {}
     try:
@@ -47,7 +52,7 @@ def _get_gist() -> dict:
         return r.json().get("files", {})
     except Exception as e:
         print(f"[storage] Gist read error: {e}")
-        return {}
+        return None
 
 
 def _file_content(entry: dict) -> str | None:
@@ -75,55 +80,94 @@ def _file_content(entry: dict) -> str | None:
         return None
 
 
-# ── Per-run cache ───────────────────────────────────────────────
+# ── Per-run cache, and the rule that keeps a failed read from ─────
+#    destroying data
 #
-# _get_gist downloads EVERY file in the Gist — the price history, the buy log
-# and the exported models all ride along on a read of bot_state.json. A single
-# monitor run did that 3-6 times, every five minutes, and a single /price does
-# it twice (once to resolve the user's language, once for the history).
+# _get_gist downloads EVERY file in the Gist, so the fetched files are cached
+# for one logical run: a monitor run used to download the whole Gist 3-6 times,
+# and a single /price twice.
 #
-# So the fetched files are cached for the length of one logical run. Three
-# rules keep that honest:
+# The dangerous case is a read that FAILS. _read_file then returns an empty
+# container — and nearly every write in this module is read-modify-write. One
+# GET timing out, followed by a PATCH that works, used to do this:
 #
-#   1. A failed or empty fetch is never cached. Caching it would make every
-#      later read in the run see "no data", and a caller that then wrote would
-#      persist that emptiness over real data — the exact failure _read_file's
-#      docstring warns about.
-#   2. Writes update the cache in place, and only when they actually landed,
-#      so a read after a write sees what was written and never resurrects the
-#      pre-write copy.
-#   3. append_price re-reads with fresh=True. That pre-write re-read exists to
-#      pick up a CONCURRENT run's appends; serving it from our own cache would
-#      quietly remove the guard.
+#     append_price     price history   720 points -> 1
+#     log_buy          portfolio       the old buys replaced by the new one
+#     add_subscriber   subscribers     3 -> 1, and every user's prefs wiped
+#
+# The data was intact on GitHub the whole time; we just could not see it, and
+# then wrote "nothing plus one item" over it. So:
+#
+#   1. A failed fetch is REMEMBERED for the run. Later reads return empty
+#      without another round trip — a failing run used to retry on every read,
+#      making 4 failed requests where 1 would do, and burning quota fastest
+#      precisely when the cause was quota exhaustion.
+#   2. While the Gist has not been read successfully this run, NO WRITE GOES
+#      OUT. Every write here is based on what was read, and a write based on a
+#      read that failed replaces real data with a fragment. The same holds for
+#      a single file that is listed but could not be fetched (a truncated file
+#      whose raw_url refetch failed).
+#   3. Writes update the cache in place, and only when they actually landed.
+#   4. append_price re-reads with fresh=True to catch a CONCURRENT run's
+#      appends. If that re-read fails but an earlier read this run succeeded,
+#      the earlier copy is real — seconds old, not wrong — and is used.
+#
+# A file that downloads fine but will not PARSE does not block writes: it is
+# corrupt on GitHub, not missing, and blocking on it would wedge every write
+# on every run, forever.
 #
 # The cron entrypoints are fresh processes, but a warm Vercel container is not
-# — so dispatch_update calls reset_cache() per update, scoping the cache to one
-# command rather than to the container's lifetime.
+# — so dispatch_update calls reset_cache() per update, scoping all of this to
+# one command rather than to the container's lifetime.
 
 _gist_cache: dict | None = None
+_gist_failed = False            # rule 1/2: nothing has been read this run
+_unreadable_files: set = set()  # rule 2: listed, but its body could not be fetched
 
 
 def reset_cache():
-    """Forget the cached Gist. Call at the start of a logical run."""
-    global _gist_cache
+    """Forget everything about the Gist. Call at the start of a logical run."""
+    global _gist_cache, _gist_failed
     _gist_cache = None
+    _gist_failed = False
+    _unreadable_files.clear()
 
 
 def _gist_files(fresh: bool = False) -> dict:
-    """The Gist's files, from cache unless `fresh` or nothing is cached yet."""
-    global _gist_cache
-    if fresh or _gist_cache is None:
-        files = _get_gist()
-        if not files:
-            return files  # rule 1: never cache a failed or empty fetch
-        _gist_cache = files
+    """The Gist's files: cached, or fetched, or {} if they cannot be read."""
+    global _gist_cache, _gist_failed
+    if not fresh:
+        if _gist_cache is not None:
+            return _gist_cache
+        if _gist_failed:
+            return {}                    # rule 1: known unreadable, no retry
+    files = _get_gist()
+    if files is None:
+        if _gist_cache is not None:
+            return _gist_cache           # rule 4: a real, seconds-old copy
+        _gist_failed = True
+        return {}
+    if not files:
+        return files                     # empty but reachable: odd, uncached
+    _gist_cache = files
+    _gist_failed = False
     return _gist_cache
+
+
+def _writes_blocked(filenames) -> str | None:
+    """Why writing these files now would be unsafe, or None if it is safe."""
+    if _gist_failed:
+        return "the Gist could not be read this run"
+    unreadable = sorted(set(filenames) & _unreadable_files)
+    if unreadable:
+        return f"{', '.join(unreadable)} could not be fetched this run"
+    return None
 
 
 def _cache_put(contents: dict):
     """Put resolved file text into the cache. No-op if nothing is cached yet.
 
-    Used for two things: reflecting a landed write (rule 2), and storing the
+    Used for two things: reflecting a landed write (rule 3), and storing the
     body of a file the Gist API truncated, so the raw_url refetch below happens
     once per run rather than on every read of the largest file we have.
     """
@@ -136,18 +180,22 @@ def _cache_put(contents: dict):
 def _read_file(filename: str, fresh: bool = False) -> dict | list:
     """Read a single JSON file from the Gist.
 
-    Returns an empty container when the file is absent or unreadable. Callers
-    that go on to WRITE the same file must treat an empty result as "no data
-    yet", never as "data was deleted" — see save_model_data.
+    Returns an empty container when the file is absent or unreadable. An
+    unreadable one cannot then be overwritten by mistake: the write guard
+    refuses every write this run (see the note above _gist_cache).
 
     `fresh` bypasses the per-run cache; see the note above it.
     """
     files = _gist_files(fresh)
-    if filename in files:
+    if filename in files and filename not in _unreadable_files:
         try:
             entry = files[filename]
             content = _file_content(entry)
-            if content is not None:
+            if content is None:
+                # Listed, but its body could not be fetched: the data exists
+                # and we cannot see it. Rule 2 — nothing may overwrite it.
+                _unreadable_files.add(filename)
+            else:
                 if entry.get("truncated"):
                     _cache_put({filename: content})
                 return json.loads(content)
@@ -170,6 +218,11 @@ def _write_file(filename: str, data) -> bool:
     if not GITHUB_TOKEN or not GIST_ID:
         print(f"[storage] No Gist credentials — skipping write for {filename}")
         return False
+    blocked = _writes_blocked([filename])
+    if blocked:
+        print(f"[storage] NOT writing {filename}: {blocked}, so this write "
+              f"would replace real data with a fragment")
+        return False
     content = json.dumps(data, indent=2)
     try:
         r = requests.patch(
@@ -188,6 +241,11 @@ def _write_file(filename: str, data) -> bool:
 def _write_files(file_dict: dict) -> bool:
     """Write multiple files to the Gist in one API call. True if it landed."""
     if not GITHUB_TOKEN or not GIST_ID:
+        return False
+    blocked = _writes_blocked(file_dict)
+    if blocked:
+        print(f"[storage] NOT writing {', '.join(file_dict)}: {blocked}, so "
+              f"this write would replace real data with a fragment")
         return False
     contents = {name: json.dumps(data, indent=2)
                 for name, data in file_dict.items()}

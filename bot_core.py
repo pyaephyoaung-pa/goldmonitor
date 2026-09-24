@@ -1149,6 +1149,47 @@ def _parse_command(text: str) -> tuple:
     return cmd, args
 
 
+# ── Rate-limit memory ────────────────────────────────────────────
+#
+# The limiter keeps its state in the Gist — and reading the Gist is the very
+# cost it exists to bound. Each inbound message used to pay one full Gist
+# download BEFORE the check could refuse it, so a throttled flood still spent
+# one GitHub request per message: five refused commands, five downloads.
+#
+# So a chat that has been refused is remembered here until its window frees,
+# and dropped before any storage read at all. It is process memory: it lasts
+# for one warm Vercel container or one poller batch, and a cold start re-learns
+# the refusal with a single read. That covers the case that matters — a flood
+# lands on the same warm container, message after message.
+
+_refused_until: dict = {}
+_REFUSED_MEMORY_MAX = 1000
+
+
+def _recently_refused(chat_id: str) -> bool:
+    """True while `chat_id` is inside a refusal this process already saw."""
+    until = _refused_until.get(chat_id)
+    if until is None:
+        return False
+    if storage._now_ts() >= until:
+        del _refused_until[chat_id]
+        return False
+    return True
+
+
+def _remember_refusal(chat_id: str, retry_after: int):
+    """Hold a refusal in memory, keeping the table bounded under a wide flood."""
+    now = storage._now_ts()
+    if len(_refused_until) >= _REFUSED_MEMORY_MAX:
+        for cid in [c for c, until in _refused_until.items() if until <= now]:
+            del _refused_until[cid]
+        if len(_refused_until) >= _REFUSED_MEMORY_MAX:
+            # Thousands of distinct chats all over their limit at once: stay
+            # bounded and let each re-learn its refusal from the Gist.
+            _refused_until.clear()
+    _refused_until[chat_id] = now + retry_after
+
+
 def dispatch_update(update: dict) -> bool:
     """Process a single Telegram update. Returns True if a command was handled.
 
@@ -1186,6 +1227,13 @@ def dispatch_update(update: dict) -> bool:
     # public bot where a missing env var would expose portfolio commands.)
     is_owner = bool(TG_CHAT_ID) and (chat_id == TG_CHAT_ID)
 
+    # A chat this process already refused is dropped before ANY storage read —
+    # otherwise the read below is exactly the cost the limiter is meant to cap.
+    if not is_owner and _recently_refused(chat_id):
+        print(f"[bot] Dropped {chat_id} on '{cmd}': still rate limited "
+              f"(no Gist read)")
+        return False
+
     # Resolved once and threaded into the handler, so rendering a message with
     # dozens of strings costs no extra Gist round-trips.
     lang = storage.get_user_lang(chat_id)
@@ -1196,6 +1244,7 @@ def dispatch_update(update: dict) -> bool:
     if not is_owner:
         verdict = storage.allow_command(chat_id, cmd in EXTERNAL_COMMANDS)
         if not verdict["allowed"]:
+            _remember_refusal(chat_id, verdict["retry_after"])
             print(f"[bot] Rate limited {chat_id} on '{cmd}' "
                   f"(retry in {verdict['retry_after']}s)")
             if verdict["notify"]:
