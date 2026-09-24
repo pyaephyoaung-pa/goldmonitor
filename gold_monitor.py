@@ -66,7 +66,7 @@ except Exception as e:
 
 # ── Telegram Notify ─────────────────────────────────────────────
 
-def notify(msg, category: str = "alerts"):
+def notify(msg, category: str = "alerts", owner_msg=None):
     """Send message to owner + all subscribers, honoring per-user preferences.
 
     `msg` is either a plain string (same text for everyone) or a callable
@@ -79,6 +79,10 @@ def notify(msg, category: str = "alerts"):
     categories (/mute) or set quiet hours (/quiet); both are checked here.
     Uses the shared bot_core.send_message; auto-removes subscribers who have
     blocked the bot (Telegram error_code 403).
+
+    `owner_msg`, when given, is what the OWNER receives instead of `msg` —
+    for content that is theirs alone. Anyone can /subscribe, so everything in
+    `msg` should be treated as public.
     """
     if not TG_BOT_TOKEN:
         print("[WARN] Telegram bot token not set")
@@ -106,12 +110,17 @@ def notify(msg, category: str = "alerts"):
     rendered = {}
 
     def body_for(chat_id) -> str:
-        if not callable(msg):
-            return msg
+        is_owner = bool(TG_CHAT_ID) and str(chat_id) == str(TG_CHAT_ID)
+        source = owner_msg if (is_owner and owner_msg is not None) else msg
+        if not callable(source):
+            return source
         lang = i18n.normalize(all_prefs.get(str(chat_id), {}).get("lang"))
-        if lang not in rendered:
-            rendered[lang] = msg(lang)
-        return rendered[lang]
+        # Cached per (audience, language): the owner's body must never be
+        # handed to a subscriber who happens to share their language.
+        key = ("owner" if source is owner_msg else "all", lang)
+        if key not in rendered:
+            rendered[key] = source(lang)
+        return rendered[key]
 
     for i, chat_id in enumerate(recipients):
         # Telegram broadcast limit is ~30 msg/s — pace sends to stay well under.
@@ -495,7 +504,7 @@ def main():
         # Fetch macro ONCE, then render it in each recipient language.
         macro_data = signals.fetch_macro()
 
-        def build_evening(lang):
+        def build_evening(lang, with_portfolio=False):
             extras = ""
             if evening_trend_parts:
                 extras += i18n.t("monitor.trends", lang,
@@ -504,7 +513,10 @@ def main():
                 key = ("monitor.streak_up" if trend["streak_direction"] == "up"
                        else "monitor.streak_down")
                 extras += i18n.t(key, lang, hours=trend["streak"])
-            if pnl["num_buys"] > 0:
+            # The OWNER's holdings and P&L. /portfolio is owner-only, and this
+            # block used to go to every subscriber — anyone who typed /subscribe
+            # got the owner's grams and profit every evening.
+            if with_portfolio and pnl["num_buys"] > 0:
                 extras += i18n.t(
                     "monitor.portfolio", lang, grams=pnl["total_grams"],
                     buys=pnl["num_buys"],
@@ -530,7 +542,8 @@ def main():
                 usd_oz=fmt_usd(usd_oz), extras=extras,
             )
 
-        notify(build_evening, "evening")
+        notify(build_evening, "evening",
+               owner_msg=lambda lang: build_evening(lang, with_portfolio=True))
         state["evening_sent"] = True
 
     # Remember the latest price so tomorrow can detect an overnight gap.
