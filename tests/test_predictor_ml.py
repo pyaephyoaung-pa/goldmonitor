@@ -1,17 +1,27 @@
 import math
 import copy
+from datetime import datetime, timedelta
+
+import pytz
+
 import predictor
+
+_START = pytz.timezone("Asia/Bangkok").localize(datetime(2026, 1, 1))
 
 
 def _series(n=220, seed=7):
     # Deterministic pseudo-random walk (no real signal) for honest-metric tests.
+    #
+    # Rows carry a timestamp, like every row append_price writes: labels measure
+    # their horizon in wall-clock hours, so a row without one cannot be labelled.
     prices, p, x = [], 1000.0, seed
     for _ in range(n):
         x = (1103515245 * x + 12345) % (2 ** 31)
         step = (x / (2 ** 31)) - 0.5  # roughly [-0.5, 0.5]
         p = max(1.0, p + step)
         prices.append(round(p, 2))
-    return [{"thb_gram": pr, "hour": i % 24, "weekday": i % 7, "usd_oz": pr / 1000}
+    return [{"ts": (_START + timedelta(hours=i)).isoformat(),
+             "thb_gram": pr, "hour": i % 24, "weekday": i % 7, "usd_oz": pr / 1000}
             for i, pr in enumerate(prices)]
 
 
