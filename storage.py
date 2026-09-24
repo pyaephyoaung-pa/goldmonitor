@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import requests
 import json
+import math
 import os
 from datetime import datetime
 import pytz
@@ -379,9 +380,12 @@ def save_day_state(state: dict) -> bool:
 def _get_entries() -> list:
     """Get all buy/sell entries. Backward-compatible with old buy-only logs."""
     entries = _read_file(BUY_LOG_FILE)
-    # Migrate old entries that lack a "type" field
+    # Migrate old entries that lack a "type" field. The isinstance guard is not
+    # decoration: on a string row, `"type" not in e` is a SUBSTRING test, comes
+    # back True, and the assignment then raises — taking down every ledger
+    # command before _replay could skip the row.
     for e in entries:
-        if "type" not in e:
+        if isinstance(e, dict) and "type" not in e:
             e["type"] = "buy"
     return entries
 
@@ -415,6 +419,32 @@ class InsufficientGold(Exception):
 GRAM_TOLERANCE = 0.0001
 
 
+def entry_is_usable(e) -> bool:
+    """A ledger row _replay can count: a buy or sell with a finite, positive
+    amount and finite, non-negative grams.
+
+    Anything else used to be counted anyway, and silently wrong:
+      * a buy with null grams added its cost but no gold;
+      * an unknown type such as "gift" fell into the SELL branch and took gold
+        out of the holdings;
+      * Infinity — which /bought inf wrote into ledgers before #14 — turned
+        every figure on /portfolio into inf.
+    Zero grams is allowed: a tiny buy legitimately rounds to 0.0000 g.
+    """
+    if not isinstance(e, dict) or e.get("type", "buy") not in ("buy", "sell"):
+        return False
+    amount, grams = e.get("amount_thb"), e.get("grams")
+    if not (_finite_number(amount) and _finite_number(grams)):
+        return False
+    return amount > 0 and grams >= 0
+
+
+def _finite_number(v) -> bool:
+    """A real, finite number. bool is excluded: JSON `true` is an int here."""
+    return (isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(v))
+
+
 def _replay(entries: list) -> dict:
     """Walk the ledger in order, carrying a moving-average cost pool.
 
@@ -427,6 +457,8 @@ def _replay(entries: list) -> dict:
     Entries are in append order, which is chronological — nothing reorders
     them, and /edit only changes an amount in place.
 
+    Rows entry_is_usable rejects are skipped and listed in `skipped_rows`.
+
     `oversold` is grams a sale claimed beyond what the pool held; it is only
     ever non-zero for a ledger that /edit or /delete would have corrupted, and
     is what those two check before saving.
@@ -434,8 +466,14 @@ def _replay(entries: list) -> dict:
     grams = cost = realized = 0.0
     bought_thb = bought_grams = sold_thb = oversold = 0.0
     buys = sells = 0
+    skipped_rows = []
 
-    for e in entries:
+    for position, e in enumerate(entries, 1):
+        if not entry_is_usable(e):
+            # Left out and REPORTED, never guessed at: its 1-based position is
+            # the number /edit and /delete take to fix it.
+            skipped_rows.append(position)
+            continue
         e_grams = e.get("grams") or 0.0
         amount = e.get("amount_thb") or 0.0
         if e.get("type", "buy") == "buy":
@@ -476,6 +514,7 @@ def _replay(entries: list) -> dict:
         "buys": buys,
         "sells": sells,
         "oversold": round(oversold, 4),
+        "skipped_rows": skipped_rows,
     }
 
 
@@ -560,7 +599,7 @@ def get_portfolio() -> dict:
             "total_invested": 0, "total_grams": 0, "avg_cost": 0,
             "num_buys": 0, "num_sells": 0,
             "total_sold": 0, "realized_pnl": 0,
-            "entries": [],
+            "entries": [], "total_entries": 0, "skipped_rows": [],
         }
 
     book = _replay(entries)
@@ -576,6 +615,11 @@ def get_portfolio() -> dict:
         "total_sold_thb": book["sold_thb"],
         "realized_pnl": book["realized"],
         "entries": entries[-10:],
+        # The whole ledger's length, NOT num_buys + num_sells: the numbers
+        # /portfolio shows are what /edit and /delete take, and once unusable
+        # rows are left out of the counts, the counts no longer add up to it.
+        "total_entries": len(entries),
+        "skipped_rows": book["skipped_rows"],
     }
 
 

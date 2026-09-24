@@ -455,6 +455,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "📈 Avg buy cost: {value}/gram",
         "th": "📈 ต้นทุนเฉลี่ย: {value}/กรัม",
     },
+    "portfolio.skipped_rows": {
+        "en": ("⚠️ Left out of these figures — cannot be read: {rows}\n"
+               "Fix or remove them with /edit or /delete"),
+        "my": ("⚠️ ဒီကိန်းဂဏန်းတွေထဲ မထည့်ထားပါ — ဖတ်လို့မရသော entry: {rows}\n"
+               "/edit သို့မဟုတ် /delete ဖြင့် ပြင်ပါ"),
+        "th": ("⚠️ ไม่ได้นำมาคิดในตัวเลขนี้ — อ่านรายการไม่ได้: {rows}\n"
+               "แก้หรือลบด้วย /edit หรือ /delete"),
+    },
+    "portfolio.unreadable_entry": {
+        "en": "unreadable entry — left out of the totals",
+        "my": "ဖတ်လို့မရသော entry — စုစုပေါင်းထဲ မထည့်ထားပါ",
+        "th": "รายการที่อ่านไม่ได้ — ไม่ได้นำมาคิดในยอดรวม",
+    },
     "portfolio.current_price": {
         "en": "💰 Current price: {value}/gram{usd}",
         "my": "💰 Current price: {value}/gram{usd}",
