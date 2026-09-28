@@ -36,20 +36,57 @@ def priced_points(history: list) -> list:
             if isinstance(h, dict) and h.get("thb_gram") is not None]
 
 
+def trading_prices(prices: list) -> list:
+    """The price series with the hours the market was closed taken out.
+
+    The monitor stores a point every hour, weekends included, and spot does
+    not move while the market is shut, so the history carries runs of one
+    repeated price — two days of them every weekend. The indicators are
+    defined over trading periods. Fed the repeats, SMA20 on a Monday morning
+    is mostly Friday's close, the Bollinger width collapses to zero so the
+    first real move lands outside the bands, and the reading changes all
+    weekend on a market that is not trading. A repeat carries no information,
+    so each run is kept as one point.
+    """
+    out = []
+    for p in prices:
+        if not out or p != out[-1]:
+            out.append(p)
+    return out
+
+
 # ── Technical Indicators ────────────────────────────────────────
 
 def calc_rsi(prices: list, period: int = 14) -> float | None:
-    """Calculate RSI (Relative Strength Index)."""
-    if len(prices) < period + 1:
+    """RSI with Wilder's smoothing, measured over the moves the price made.
+
+    The old version read about 20x more extreme than any chart, for two reasons:
+
+      * It averaged only the last `period` deltas — Cutler's variant, with no
+        memory. On 14 hourly points one bad morning pinned it near 0: it said
+        0.98 on a day a standard 1h RSI(14) read about 20.
+      * A window in which nothing moved scored 0, "oversold". The history has
+        a point every hour, weekends included, when spot does not move — so
+        every weekend read "RSI 0.0, oversold" on a market that was shut.
+
+    Hours with no move are left out, the way a chart has no weekend bars:
+    counting them as zero-change periods would also decay both averages, so
+    the first move after a weekend would count for far more than it should.
+    None until there are `period` moves to measure.
+    """
+    moves = [b - a for a, b in zip(prices, prices[1:]) if b != a]
+    if len(moves) < period:
         return None
-    deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-    recent = deltas[-period:]
-    gains = [d for d in recent if d > 0]
-    losses = [-d for d in recent if d < 0]
-    avg_gain = sum(gains) / period if gains else 0
-    avg_loss = sum(losses) / period if losses else 0.0001
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 2)
+    gains = [max(m, 0.0) for m in moves]
+    losses = [max(-m, 0.0) for m in moves]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for gain, loss in zip(gains[period:], losses[period:]):
+        avg_gain = (avg_gain * (period - 1) + gain) / period
+        avg_loss = (avg_loss * (period - 1) + loss) / period
+    if avg_loss == 0:
+        return 100.0
+    return round(100 - 100 / (1 + avg_gain / avg_loss), 2)
 
 
 def calc_sma(prices: list, period: int) -> float | None:
@@ -164,6 +201,39 @@ def calc_support_resistance(prices: list, lookback: int = 48) -> dict:
     }
 
 
+# ── The overall reading ─────────────────────────────────────────
+
+# From the strongest fall to the strongest rise. The names describe what the
+# 1h indicators show. They used to be orders — STRONG BUY, BUY, HOLD, WAIT —
+# and the strongest read "the best time to buy", but replayed over two years
+# of hourly gold the price was no likelier to be higher 24h after it than
+# after any other hour (55% vs 54%, p=0.43). /predict now shows how each
+# reading has played out — see ta_track_record.
+READINGS = ("OVERSOLD", "DIPPING", "NEUTRAL", "RISING", "OVERBOUGHT")
+
+# The i18n text for each reading. predict() looks the text up by the label
+# analyze() chose instead of re-deriving it from the score, so the two can
+# never disagree.
+_READING_TEXT = {
+    "OVERSOLD": "ta.oversold", "DIPPING": "ta.dipping", "NEUTRAL": "ta.neutral",
+    "RISING": "ta.rising", "OVERBOUGHT": "ta.overbought",
+}
+
+
+def reading_for(score: float) -> str:
+    """The label for a composite score. The thresholds mirror each other
+    around zero, so +x and -x sit the same distance from NEUTRAL."""
+    if score > 1:
+        return "OVERSOLD"
+    if score > 0.3:
+        return "DIPPING"
+    if score >= -0.3:
+        return "NEUTRAL"
+    if score >= -1:
+        return "RISING"
+    return "OVERBOUGHT"
+
+
 # ── Full Technical Analysis ─────────────────────────────────────
 
 def analyze(history: list) -> dict:
@@ -173,8 +243,10 @@ def analyze(history: list) -> dict:
         history: list of dicts with at least 'thb_gram' field
     Returns:
         dict of all indicator values + interpretation
+
+    Every indicator runs over trading hours only — see trading_prices.
     """
-    prices = [h["thb_gram"] for h in priced_points(history)]
+    prices = trading_prices([h["thb_gram"] for h in priced_points(history)])
     if len(prices) < 5:
         return {"error": "Not enough data (need at least 5 data points)"}
 
@@ -187,9 +259,9 @@ def analyze(history: list) -> dict:
     result["rsi"] = rsi
     if rsi is not None:
         if rsi < 30:
-            result["rsi_signal"] = "OVERSOLD — buy opportunity"
+            result["rsi_signal"] = "OVERSOLD"
         elif rsi > 70:
-            result["rsi_signal"] = "OVERBOUGHT — consider waiting"
+            result["rsi_signal"] = "OVERBOUGHT"
         else:
             result["rsi_signal"] = "NEUTRAL"
 
@@ -226,9 +298,9 @@ def analyze(history: list) -> dict:
     result["bollinger"] = bb
     if bb:
         if bb["position"] < 10:
-            result["bb_signal"] = "NEAR LOWER BAND — potential bounce/buy"
+            result["bb_signal"] = "NEAR LOWER BAND"
         elif bb["position"] > 90:
-            result["bb_signal"] = "NEAR UPPER BAND — potential pullback"
+            result["bb_signal"] = "NEAR UPPER BAND"
         else:
             result["bb_signal"] = "WITHIN BANDS"
 
@@ -251,8 +323,14 @@ def analyze(history: list) -> dict:
     sr = calc_support_resistance(prices)
     result["support_resistance"] = sr
 
-    # ── Overall Score (weighted composite) ──────────────────────
-    score = 0
+    # ── Overall reading (weighted composite) ────────────────────
+    # Positive = the price has FALLEN on these measures, negative = it has
+    # RISEN. Every weight is mirrored, so the score runs -1.2..+1.2 and both
+    # ends can be reached. It used to be lopsided — an unchanged SMA pair
+    # counted as "dipping", and the rising side topped out at -0.9 — so in two
+    # years of replayed hourly gold OVERBOUGHT never fired once, while the two
+    # falling-side readings covered 45% of all hours.
+    score = 0.0
     factors = 0
 
     if rsi is not None:
@@ -263,40 +341,29 @@ def analyze(history: list) -> dict:
         factors += 1
 
     if sma5 and sma20:
-        if sma5 > sma20: score -= 0.5  # price already up, less attractive
-        else: score += 1  # dipping below average
+        if sma5 < sma20: score += 1
+        elif sma5 > sma20: score -= 1
         factors += 1
 
-    if macd and macd["histogram"] < 0:
-        score += 0.5
-    elif macd:
-        score -= 0.5
     if macd:
+        if macd["histogram"] < 0: score += 0.5
+        elif macd["histogram"] > 0: score -= 0.5
         factors += 1
 
     if bb:
         if bb["position"] < 20: score += 1.5
-        elif bb["position"] > 80: score -= 1
+        elif bb["position"] > 80: score -= 1.5
         factors += 1
 
     if mom is not None:
         if mom < -1: score += 1
-        elif mom > 1: score -= 0.5
+        elif mom > 1: score -= 1
         factors += 1
 
     if factors > 0:
         normalized = round(score / factors, 2)
         result["buy_score"] = normalized
-        if normalized > 1:
-            result["overall_signal"] = "STRONG BUY"
-        elif normalized > 0.3:
-            result["overall_signal"] = "BUY"
-        elif normalized > -0.3:
-            result["overall_signal"] = "HOLD"
-        elif normalized > -1:
-            result["overall_signal"] = "WAIT"
-        else:
-            result["overall_signal"] = "OVERBOUGHT"
+        result["overall_signal"] = reading_for(normalized)
 
     return result
 
@@ -306,6 +373,13 @@ def analyze(history: list) -> dict:
 # Feature-vector order is fixed; see `feature_names` in train_model(). Adding or
 # reordering a feature invalidates any model already stored in the Gist, so the
 # training metadata records the names alongside the exported models.
+
+# Stamped on every model, like EDGE_TEST. Change it whenever a feature's
+# DEFINITION changes but the vector keeps its length — n_features cannot see
+# that, and a model fed values from a different formula does not fail, it just
+# scores nonsense with full confidence. "rsi-wilder-v1": RSI switched from a
+# 14-point simple average to Wilder's smoothing over actual moves.
+FEATURE_SET = "rsi-wilder-v1"
 
 EVENT_HOURS_CAP = 168.0  # a week out is "far away" as far as the model cares
 
@@ -628,6 +702,127 @@ def edge_significance(accuracy: float, baseline: float, n_test: int,
     return _binomial_tail(k, n_eff, baseline), n_eff
 
 
+# ── Does the TA reading mean anything? ──────────────────────────
+#
+# A model has to pass edge_significance before its forecast is shown as having
+# an edge. The TA reading never faced any test, and it used to tell every
+# subscriber "STRONG BUY — the best time to buy". So it gets the same kind of
+# test: once a day, replay analyze() over the stored history and record, for
+# each reading, how often the price was higher TA_TRACK_HORIZON hours later,
+# against how often it was higher after ANY hour of the same stretch.
+#
+# Readings come in runs — one sharp fall is several OVERSOLD hours in a row,
+# sharing most of one outcome — so, as for the models, only independent
+# windows count: a case is counted only if it starts at least one horizon
+# after the last counted case of the same reading.
+#
+# Only hours in which the price moved are graded. While the market is shut
+# the reading stays frozen at Friday's close and the price sits still, so a
+# weekend would count one stale reading again every `horizon` hours — and
+# score each of its flat outcomes as UP, since _went_up counts "at or above".
+
+TA_TRACK_HORIZON = 24
+# Rows skipped at the start of the history while the indicators settle.
+TA_TRACK_WARMUP = 50
+# Stamped on the stored record; one computed for other readings or by another
+# test is ignored rather than shown next to today's reading.
+TA_TRACK_VERSION = "readings-v1"
+# Which way the price would lean after each reading IF the reading carried
+# information. NEUTRAL implies nothing, so there is nothing to test.
+_IMPLIED_MOVE = {"OVERSOLD": "up", "DIPPING": "up",
+                 "RISING": "down", "OVERBOUGHT": "down"}
+
+
+def _binomial_head(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p)."""
+    return 1.0 - _binomial_tail(k + 1, n, p)
+
+
+def ta_track_record(history: list, horizon: int = TA_TRACK_HORIZON) -> dict | None:
+    """How the price moved after each TA reading in `history`.
+
+    For every directional reading: `n` independent cases, `ups` of them
+    followed by a higher price `horizon` hours later, and whether that beats
+    the stretch's own base rate (`base_up`) in the direction the reading
+    implies, by the one-sided binomial test at EDGE_P_VALUE. None if no row
+    has a matured outcome yet.
+    """
+    timeline = _timeline(history)
+    graded = []  # (time, reading, went_up)
+    last_price = None
+    for idx, row in enumerate(history):
+        price = row.get("thb_gram") if isinstance(row, dict) else None
+        moved = price is not None and last_price is not None and price != last_price
+        if price is not None:
+            last_price = price
+        if idx < TA_TRACK_WARMUP or not moved:
+            continue
+        went_up = _build_labels(history, idx, horizon, timeline)
+        if went_up is None:
+            continue
+        reading = analyze(history[:idx + 1]).get("overall_signal")
+        if reading:
+            graded.append((_entry_time(history[idx]), reading, went_up))
+    if not graded:
+        return None
+
+    base_up = sum(up for _, _, up in graded) / len(graded)
+    readings = {}
+    for name, move in _IMPLIED_MOVE.items():
+        cases, last = [], None
+        for t, reading, up in graded:
+            if reading == name and (last is None
+                                    or t - last >= timedelta(hours=horizon)):
+                cases.append(up)
+                last = t
+        n, ups = len(cases), sum(cases)
+        if not n:
+            readings[name] = {"n": 0, "ups": 0, "has_edge": False}
+            continue
+        if move == "up":
+            p_value = _binomial_tail(ups, n, base_up)
+            beats = ups / n > base_up
+        else:
+            p_value = _binomial_head(ups, n, base_up)
+            beats = ups / n < base_up
+        readings[name] = {"n": n, "ups": ups, "p_value": round(p_value, 4),
+                          "has_edge": beats and p_value < EDGE_P_VALUE}
+
+    times = timeline[0]
+    return {
+        "version": TA_TRACK_VERSION,
+        "horizon": horizon,
+        "base_up": round(base_up, 4),
+        "days": max(1, round((times[-1] - times[0]).total_seconds() / 86400)),
+        "readings": readings,
+    }
+
+
+def _stored_track(model_data: dict, reading: str | None) -> dict | None:
+    """The nightly record for `reading`, if one is stored and usable.
+
+    It comes back from a shared store, so every field is checked rather than
+    trusted — /predict must not crash on a hand-edited Gist.
+    """
+    track = model_data.get("ta_track")
+    if (reading not in _IMPLIED_MOVE or not isinstance(track, dict)
+            or track.get("version") != TA_TRACK_VERSION):
+        return None
+    readings = track.get("readings")
+    rec = readings.get(reading) if isinstance(readings, dict) else None
+    if not isinstance(rec, dict):
+        return None
+    n, ups = rec.get("n"), rec.get("ups")
+    base, days, horizon = track.get("base_up"), track.get("days"), track.get("horizon")
+    if not (isinstance(n, int) and isinstance(ups, int) and 0 <= ups <= n
+            and isinstance(base, (int, float)) and 0 <= base <= 1
+            and isinstance(days, int) and isinstance(horizon, int)):
+        return None
+    return {"reading": reading, "move": _IMPLIED_MOVE[reading], "n": n,
+            "ups": ups, "base_up": base, "days": days, "horizon": horizon,
+            "has_edge": rec.get("has_edge") is True}
+
+
 def train_model(history: list) -> dict | None:
     """Train gradient boosting models for 4h, 12h, 24h prediction.
 
@@ -748,6 +943,7 @@ def train_model(history: list) -> dict | None:
             # feature vector — adding a feature silently invalidates a stored
             # model, and the resulting error is otherwise opaque.
             "n_features": X_arr.shape[1],
+            "feature_set": FEATURE_SET,
             "accuracy": oos_acc,          # back-compat: now the honest OOS number
             "oos_accuracy": oos_acc,
             "baseline_accuracy": baseline_acc,
@@ -794,20 +990,15 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
     if history:
         result["usd_oz"] = history[-1].get("usd_oz")
 
-    # Technical-only prediction (always available)
-    # buy_score > 0 = oversold/dipping = BUY opportunity
-    # buy_score < 0 = overbought/rising = WAIT
-    score = ta.get("buy_score", 0)
-    if score > 1:
-        result["ta_outlook"] = i18n.t("ta.strong_buy", lang)
-    elif score > 0.3:
-        result["ta_outlook"] = i18n.t("ta.buy", lang)
-    elif score > -0.3:
-        result["ta_outlook"] = i18n.t("ta.hold", lang)
-    elif score > -1:
-        result["ta_outlook"] = i18n.t("ta.wait", lang)
-    else:
-        result["ta_outlook"] = i18n.t("ta.overbought", lang)
+    # Technical reading (always available once there is enough data). With
+    # too little data there is no reading, and no text — this used to default
+    # the score to 0 and describe a price it had not measured as "stable".
+    reading_key = _READING_TEXT.get(ta.get("overall_signal"))
+    if reading_key:
+        result["ta_outlook"] = i18n.t(reading_key, lang)
+    track = _stored_track(model_data, ta.get("overall_signal"))
+    if track:
+        result["ta_track"] = track
 
     # ML predictions (if models exist)
     models_dict = model_data.get("models", {})
@@ -848,6 +1039,15 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
                 result["predictions"][horizon_name] = {
                     "stale": True,
                     "error": "stored in the old pickle format — retrains at 3am BKK",
+                }
+                continue
+
+            if minfo.get("feature_set") != FEATURE_SET:
+                # Same length, different formulas: the trees' thresholds were
+                # learned on values this vector no longer produces.
+                result["predictions"][horizon_name] = {
+                    "stale": True,
+                    "error": "trained on older feature formulas — retrains at 3am BKK",
                 }
                 continue
 
@@ -1085,7 +1285,7 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
             rsi_bar = "▓▓▓▓░ High"
         else:
             rsi_bar = "▓▓▓▓▓ Overbought"
-        lines.append(f"📊 RSI: {rsi} [{rsi_bar}]")
+        lines.append(f"📊 RSI (1h): {rsi} [{rsi_bar}]")
 
     lines.append("━━━━━━━━━━━━━━━")
 
@@ -1133,6 +1333,22 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
     if ta.get("overall_signal"):
         lines.append(i18n.t("predict.tech_signal", lang,
                             signal=ta["overall_signal"], score=ta.get("buy_score", "?")))
+
+    # What followed this reading before — see ta_track_record.
+    track = prediction.get("ta_track")
+    if track and track["n"]:
+        up = track["move"] == "up"
+        hits = track["ups"] if up else track["n"] - track["ups"]
+        base = track["base_up"] if up else 1 - track["base_up"]
+        lines.append(i18n.t(
+            "predict.ta_track_up" if up else "predict.ta_track_down", lang,
+            days=track["days"], signal=track["reading"], h=track["horizon"],
+            hits=hits, n=track["n"], rate=round(hits / track["n"] * 100),
+            base=round(base * 100),
+            verdict="✅edge" if track["has_edge"] else "⚠️no-edge"))
+    elif track:
+        lines.append(i18n.t("predict.ta_track_none", lang,
+                            days=track["days"], signal=track["reading"]))
 
     # ML Predictions
     if prediction.get("predictions"):

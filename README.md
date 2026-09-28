@@ -72,7 +72,7 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 
 | When | Message |
 |---|---|
-| Morning 6am–2pm (once) | 🌅 Open price + trend + TA signal |
+| Morning 6am–2pm (once) | 🌅 Open price + trend + TA reading (1h) |
 | Evening 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 | Sunday evening | 📅 Weekly recap (week change, high/low, best/worst day) |
 
@@ -176,14 +176,26 @@ GitHub → **Actions** → **Gold Price Monitor** → **Run workflow**
 ## 🔮 Prediction: How It Works
 
 **Technical Analysis (always available):**
-RSI, SMA (5/20), EMA, MACD, Bollinger Bands, Momentum — combined into a buy/hold/wait score.
+RSI, SMA (5/20), EMA, MACD, Bollinger Bands, Momentum on the **1h** chart — trading
+hours only, so a weekend leaves the reading where Friday's close left it — combined
+into one symmetric reading: `OVERSOLD` / `DIPPING` / `NEUTRAL` / `RISING` /
+`OVERBOUGHT`. The reading describes the move; it is not a buy or sell call.
+RSI is RSI(14) with Wilder's smoothing, over the last ~14 **trading hours**, not days.
+
+**Is the reading worth anything?** Every night the bot replays the reading over its
+stored history and grades it the way the ML models are graded: how often the price
+was higher 24h later, against how often it was higher after *any* hour, with a
+binomial test on independent windows. `/predict` shows that record next to the
+reading, with `✅edge` / `⚠️no-edge`. Replayed over two years of hourly gold, no
+reading had an edge.
 
 **ML Model (after 100+ data points ≈ 4 days):**
 GradientBoosting classifier trained on historical features. Predicts price direction for 4h, 12h, and 24h horizons. Auto-retrains daily at 3am.
 
-Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the combined outlook tells you to ignore ML and rely on the TA signal. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
+Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
 
-Both signals are combined for a final outlook in alerts and the `/predict` command.
+The TA reading appears in the morning message, price alerts and `/price`; `/predict`
+shows it next to the ML outlook.
 
 **Live accuracy tracking:** every evening the bot records its ML predictions, then
 scores them once they mature (4h/12h/24h later) against the actual price. The real
@@ -591,7 +603,7 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 
 | အချိန် | Message |
 |---|---|
-| မနက် 6am–2pm (once) | 🌅 Open ဈေး + trend + TA signal |
+| မနက် 6am–2pm (once) | 🌅 Open ဈေး + trend + TA reading (1h) |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 | တနင်္ဂနွေ ညနေ | 📅 Weekly recap (week change, high/low, best/worst day) |
 
@@ -695,14 +707,26 @@ GitHub → **Actions** → **Gold Price Monitor** → **Run workflow**
 ## 🔮 Prediction: How It Works
 
 **Technical Analysis (always available):**
-RSI, SMA (5/20), EMA, MACD, Bollinger Bands, Momentum — combined into a buy/hold/wait score.
+RSI, SMA (5/20), EMA, MACD, Bollinger Bands, Momentum on the **1h** chart — trading
+hours only, so a weekend leaves the reading where Friday's close left it — combined
+into one symmetric reading: `OVERSOLD` / `DIPPING` / `NEUTRAL` / `RISING` /
+`OVERBOUGHT`. The reading describes the move; it is not a buy or sell call.
+RSI is RSI(14) with Wilder's smoothing, over the last ~14 **trading hours**, not days.
+
+**Is the reading worth anything?** Every night the bot replays the reading over its
+stored history and grades it the way the ML models are graded: how often the price
+was higher 24h later, against how often it was higher after *any* hour, with a
+binomial test on independent windows. `/predict` shows that record next to the
+reading, with `✅edge` / `⚠️no-edge`. Replayed over two years of hourly gold, no
+reading had an edge.
 
 **ML Model (after 100+ data points ≈ 4 days):**
 GradientBoosting classifier trained on historical features. Predicts price direction for 4h, 12h, and 24h horizons. Auto-retrains daily at 3am.
 
-Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the combined outlook tells you to ignore ML and rely on the TA signal. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
+Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
 
-Both signals are combined for a final outlook in alerts and the `/predict` command.
+The TA reading appears in the morning message, price alerts and `/price`; `/predict`
+shows it next to the ML outlook.
 
 **Live accuracy tracking:** every evening the bot records its ML predictions, then
 scores them once they mature (4h/12h/24h later) against the actual price. The real

@@ -196,3 +196,43 @@ def test_a_null_ml_warned_on_still_warns(monkeypatch):
 
     assert any("requirements-ml.txt" in m for m in sent), sent
     assert files[storage.MODEL_DATA_FILE]["ml_warned_on"] == "2026-06-18"
+
+
+# ── The TA track record rides along with the nightly job ────────
+
+def test_the_ta_track_record_is_kept_without_the_ml_extras(monkeypatch):
+    """It is pure stdlib: a broken ML install must not take it down too."""
+    monkeypatch.setattr(predictor, "ml_available", lambda: False)
+
+    _, files = _training_run(monkeypatch, _store_with_history())
+
+    stored = files[storage.MODEL_DATA_FILE]
+    assert stored["ta_track"]["version"] == predictor.TA_TRACK_VERSION
+    assert stored["ta_track"]["computed"].startswith("2026-06-18")
+    assert stored["ml_warned_on"] == "2026-06-18"  # same write, both kept
+
+
+def test_the_ta_track_record_is_computed_once_a_day(monkeypatch):
+    """Hour 3 holds twelve monitor runs; the replay belongs to the first."""
+    monkeypatch.setattr(predictor, "ml_available", lambda: False)
+    # Recorded, not raised: the job deliberately swallows a failing replay.
+    calls = []
+    monkeypatch.setattr(predictor, "ta_track_record", lambda h: calls.append(h))
+    store = _store_with_history()
+    store[storage.MODEL_DATA_FILE] = {
+        "ml_warned_on": "2026-06-18",
+        "ta_track": {"computed": "2026-06-18T03:00:00+07:00"}}
+
+    _training_run(monkeypatch, store)
+
+    assert calls == []
+
+
+def test_a_failing_track_record_does_not_cost_the_retrain(monkeypatch):
+    monkeypatch.setattr(predictor, "ta_track_record", lambda h: 1 / 0)
+    monkeypatch.setattr(predictor, "train_model", lambda h: {
+        "models": {}, "last_trained": "2026-06-18T03:00:00+07:00"})
+
+    _, files = _training_run(monkeypatch, _store_with_history())
+
+    assert files[storage.MODEL_DATA_FILE]["last_trained"].startswith("2026-06-18")
