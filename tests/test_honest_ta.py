@@ -7,6 +7,10 @@ BUY":
   1. RSI averaged only its last 14 hourly deltas and scored a window with no
      movement as 0, "oversold". A standard 1h RSI(14) read about 20 that day,
      and every weekend the bot read "RSI 0.0" on a market that was shut.
+
+  2. The other indicators ran over the weekend's repeated prices too, so the
+     reading kept changing on a market that was not trading. Replayed over two
+     years, 75% of closed-market hours were labelled BUY or STRONG BUY.
 """
 import contextlib
 import io
@@ -90,3 +94,24 @@ def test_models_trained_on_the_old_rsi_are_stale_until_retrained():
     for p in stale["predictions"].values():
         assert p["stale"] is True and "direction" not in p
         assert "older feature formulas" in p["error"]
+
+
+# ── 2. Closed-market hours ──────────────────────────────────────
+
+def _with_weekend(history, hours=48):
+    """The cron keeps storing a point every hour while spot sits still."""
+    last = history[-1]
+    t = datetime.fromisoformat(last["ts"])
+    return history + [dict(last, ts=(t + timedelta(hours=i)).isoformat())
+                      for i in range(1, hours + 1)]
+
+
+def test_a_weekend_does_not_change_the_reading():
+    for seed in range(5):
+        friday = _walk(seed, 200)
+        assert predictor.analyze(_with_weekend(friday)) == predictor.analyze(friday)
+
+
+def test_trading_prices_keeps_each_run_once():
+    assert predictor.trading_prices([1, 1, 2, 2, 2, 1, 3, 3]) == [1, 2, 1, 3]
+    assert predictor.trading_prices([]) == []

@@ -36,6 +36,25 @@ def priced_points(history: list) -> list:
             if isinstance(h, dict) and h.get("thb_gram") is not None]
 
 
+def trading_prices(prices: list) -> list:
+    """The price series with the hours the market was closed taken out.
+
+    The monitor stores a point every hour, weekends included, and spot does
+    not move while the market is shut, so the history carries runs of one
+    repeated price — two days of them every weekend. The indicators are
+    defined over trading periods. Fed the repeats, SMA20 on a Monday morning
+    is mostly Friday's close, the Bollinger width collapses to zero so the
+    first real move lands outside the bands, and the reading changes all
+    weekend on a market that is not trading. A repeat carries no information,
+    so each run is kept as one point.
+    """
+    out = []
+    for p in prices:
+        if not out or p != out[-1]:
+            out.append(p)
+    return out
+
+
 # ── Technical Indicators ────────────────────────────────────────
 
 def calc_rsi(prices: list, period: int = 14) -> float | None:
@@ -191,8 +210,10 @@ def analyze(history: list) -> dict:
         history: list of dicts with at least 'thb_gram' field
     Returns:
         dict of all indicator values + interpretation
+
+    Every indicator runs over trading hours only — see trading_prices.
     """
-    prices = [h["thb_gram"] for h in priced_points(history)]
+    prices = trading_prices([h["thb_gram"] for h in priced_points(history)])
     if len(prices) < 5:
         return {"error": "Not enough data (need at least 5 data points)"}
 
