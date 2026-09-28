@@ -39,17 +39,35 @@ def priced_points(history: list) -> list:
 # ── Technical Indicators ────────────────────────────────────────
 
 def calc_rsi(prices: list, period: int = 14) -> float | None:
-    """Calculate RSI (Relative Strength Index)."""
-    if len(prices) < period + 1:
+    """RSI with Wilder's smoothing, measured over the moves the price made.
+
+    The old version read about 20x more extreme than any chart, for two reasons:
+
+      * It averaged only the last `period` deltas — Cutler's variant, with no
+        memory. On 14 hourly points one bad morning pinned it near 0: it said
+        0.98 on a day a standard 1h RSI(14) read about 20.
+      * A window in which nothing moved scored 0, "oversold". The history has
+        a point every hour, weekends included, when spot does not move — so
+        every weekend read "RSI 0.0, oversold" on a market that was shut.
+
+    Hours with no move are left out, the way a chart has no weekend bars:
+    counting them as zero-change periods would also decay both averages, so
+    the first move after a weekend would count for far more than it should.
+    None until there are `period` moves to measure.
+    """
+    moves = [b - a for a, b in zip(prices, prices[1:]) if b != a]
+    if len(moves) < period:
         return None
-    deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-    recent = deltas[-period:]
-    gains = [d for d in recent if d > 0]
-    losses = [-d for d in recent if d < 0]
-    avg_gain = sum(gains) / period if gains else 0
-    avg_loss = sum(losses) / period if losses else 0.0001
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 2)
+    gains = [max(m, 0.0) for m in moves]
+    losses = [max(-m, 0.0) for m in moves]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for gain, loss in zip(gains[period:], losses[period:]):
+        avg_gain = (avg_gain * (period - 1) + gain) / period
+        avg_loss = (avg_loss * (period - 1) + loss) / period
+    if avg_loss == 0:
+        return 100.0
+    return round(100 - 100 / (1 + avg_gain / avg_loss), 2)
 
 
 def calc_sma(prices: list, period: int) -> float | None:
@@ -306,6 +324,13 @@ def analyze(history: list) -> dict:
 # Feature-vector order is fixed; see `feature_names` in train_model(). Adding or
 # reordering a feature invalidates any model already stored in the Gist, so the
 # training metadata records the names alongside the exported models.
+
+# Stamped on every model, like EDGE_TEST. Change it whenever a feature's
+# DEFINITION changes but the vector keeps its length — n_features cannot see
+# that, and a model fed values from a different formula does not fail, it just
+# scores nonsense with full confidence. "rsi-wilder-v1": RSI switched from a
+# 14-point simple average to Wilder's smoothing over actual moves.
+FEATURE_SET = "rsi-wilder-v1"
 
 EVENT_HOURS_CAP = 168.0  # a week out is "far away" as far as the model cares
 
@@ -748,6 +773,7 @@ def train_model(history: list) -> dict | None:
             # feature vector — adding a feature silently invalidates a stored
             # model, and the resulting error is otherwise opaque.
             "n_features": X_arr.shape[1],
+            "feature_set": FEATURE_SET,
             "accuracy": oos_acc,          # back-compat: now the honest OOS number
             "oos_accuracy": oos_acc,
             "baseline_accuracy": baseline_acc,
@@ -848,6 +874,15 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
                 result["predictions"][horizon_name] = {
                     "stale": True,
                     "error": "stored in the old pickle format — retrains at 3am BKK",
+                }
+                continue
+
+            if minfo.get("feature_set") != FEATURE_SET:
+                # Same length, different formulas: the trees' thresholds were
+                # learned on values this vector no longer produces.
+                result["predictions"][horizon_name] = {
+                    "stale": True,
+                    "error": "trained on older feature formulas — retrains at 3am BKK",
                 }
                 continue
 

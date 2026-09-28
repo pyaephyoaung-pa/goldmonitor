@@ -1006,9 +1006,9 @@ STRINGS: dict[str, dict[str, str]] = {
                          "th": "การประกาศตามกำหนด"},
 
     "predict.models_stale": {
-        "en": "ℹ️ Models are being rebuilt for the new event features — ML resumes after the 3am BKK retrain.",
-        "my": "ℹ️ Event features အသစ်အတွက် models ပြန်တည်ဆောက်နေပါသည် — 3am BKK retrain ပြီးမှ ML ပြန်ရပါမည်။",
-        "th": "ℹ️ กำลังสร้างโมเดลใหม่สำหรับฟีเจอร์เหตุการณ์ — ML จะกลับมาหลังเทรนรอบ 03:00 น. (BKK)",
+        "en": "ℹ️ Models are being rebuilt for updated features — ML resumes after the 3am BKK retrain.",
+        "my": "ℹ️ Features ပြောင်းထားသဖြင့် models ပြန်တည်ဆောက်နေပါသည် — 3am BKK retrain ပြီးမှ ML ပြန်ရပါမည်။",
+        "th": "ℹ️ กำลังสร้างโมเดลใหม่สำหรับฟีเจอร์ที่อัปเดต — ML จะกลับมาหลังเทรนรอบ 03:00 น. (BKK)",
     },
     "events.header": {
         "en": "📅 <b>Upcoming Market Events</b>",
