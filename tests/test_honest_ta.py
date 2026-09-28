@@ -11,6 +11,10 @@ BUY":
   2. The other indicators ran over the weekend's repeated prices too, so the
      reading kept changing on a market that was not trading. Replayed over two
      years, 75% of closed-market hours were labelled BUY or STRONG BUY.
+
+  3. The composite was lopsided: the falling side reached +1.2, the rising
+     side only -0.9, so OVERBOUGHT (-1 or lower) could never fire — and did
+     not, once, in two years — while BUY or STRONG BUY covered 45% of hours.
 """
 import contextlib
 import io
@@ -115,3 +119,43 @@ def test_a_weekend_does_not_change_the_reading():
 def test_trading_prices_keeps_each_run_once():
     assert predictor.trading_prices([1, 1, 2, 2, 2, 1, 3, 3]) == [1, 2, 1, 3]
     assert predictor.trading_prices([]) == []
+
+
+# ── 3. A symmetric scale ────────────────────────────────────────
+
+def _hist(prices):
+    return [{"thb_gram": p} for p in prices]
+
+
+def test_a_strong_rise_can_read_overbought():
+    rise = [round(4000 * 1.003 ** i, 2) for i in range(120)]
+    ta = predictor.analyze(_hist(rise))
+    assert ta["buy_score"] == -1.2
+    assert ta["overall_signal"] == predictor.READINGS[-1]
+
+
+def test_a_mirrored_series_gets_the_mirrored_score():
+    """Reflect a price path about a level: every indicator flips sign, so the
+    score must too. The old weights gave +1.2 one way and -0.9 the other."""
+    for seed in range(10):
+        path = [h["thb_gram"] for h in _walk(seed, 200)]
+        mirror = [round(8000 - p, 2) for p in path]
+        up, down = predictor.analyze(_hist(path)), predictor.analyze(_hist(mirror))
+        assert up["buy_score"] == -down["buy_score"], seed
+
+
+def test_thresholds_mirror_each_other():
+    """+x and -x land the same number of steps from the middle reading,
+    including exactly on a boundary (the old code sent -1.0 to OVERBOUGHT but
+    +1.0 only to BUY)."""
+    readings = predictor.READINGS
+    for x in (0.0, 0.3, 0.31, 1.0, 1.01, 1.2):
+        step = readings.index(predictor.reading_for(x))
+        assert predictor.reading_for(-x) == readings[len(readings) - 1 - step], x
+
+
+def test_no_reading_without_data():
+    """Too little data used to fall back to score 0 and call the price
+    "stable" — describing a price it had not measured."""
+    out = predictor.predict(_hist([4000.0, 4001.0, 4002.0]), {})
+    assert "ta_outlook" not in out

@@ -201,6 +201,34 @@ def calc_support_resistance(prices: list, lookback: int = 48) -> dict:
     }
 
 
+# ── The overall reading ─────────────────────────────────────────
+
+# From the strongest fall to the strongest rise.
+READINGS = ("STRONG BUY", "BUY", "HOLD", "WAIT", "OVERBOUGHT")
+
+# The i18n text for each reading. predict() looks the text up by the label
+# analyze() chose instead of re-deriving it from the score, so the two can
+# never disagree.
+_READING_TEXT = {
+    "STRONG BUY": "ta.strong_buy", "BUY": "ta.buy", "HOLD": "ta.hold",
+    "WAIT": "ta.wait", "OVERBOUGHT": "ta.overbought",
+}
+
+
+def reading_for(score: float) -> str:
+    """The label for a composite score. The thresholds mirror each other
+    around zero, so +x and -x sit the same distance from HOLD."""
+    if score > 1:
+        return "STRONG BUY"
+    if score > 0.3:
+        return "BUY"
+    if score >= -0.3:
+        return "HOLD"
+    if score >= -1:
+        return "WAIT"
+    return "OVERBOUGHT"
+
+
 # ── Full Technical Analysis ─────────────────────────────────────
 
 def analyze(history: list) -> dict:
@@ -290,8 +318,14 @@ def analyze(history: list) -> dict:
     sr = calc_support_resistance(prices)
     result["support_resistance"] = sr
 
-    # ── Overall Score (weighted composite) ──────────────────────
-    score = 0
+    # ── Overall reading (weighted composite) ────────────────────
+    # Positive = the price has FALLEN on these measures, negative = it has
+    # RISEN. Every weight is mirrored, so the score runs -1.2..+1.2 and both
+    # ends can be reached. It used to be lopsided — an unchanged SMA pair
+    # counted as "dipping", and the rising side topped out at -0.9 — so in two
+    # years of replayed hourly gold OVERBOUGHT never fired once, while BUY or
+    # STRONG BUY covered 45% of all hours.
+    score = 0.0
     factors = 0
 
     if rsi is not None:
@@ -302,40 +336,29 @@ def analyze(history: list) -> dict:
         factors += 1
 
     if sma5 and sma20:
-        if sma5 > sma20: score -= 0.5  # price already up, less attractive
-        else: score += 1  # dipping below average
+        if sma5 < sma20: score += 1
+        elif sma5 > sma20: score -= 1
         factors += 1
 
-    if macd and macd["histogram"] < 0:
-        score += 0.5
-    elif macd:
-        score -= 0.5
     if macd:
+        if macd["histogram"] < 0: score += 0.5
+        elif macd["histogram"] > 0: score -= 0.5
         factors += 1
 
     if bb:
         if bb["position"] < 20: score += 1.5
-        elif bb["position"] > 80: score -= 1
+        elif bb["position"] > 80: score -= 1.5
         factors += 1
 
     if mom is not None:
         if mom < -1: score += 1
-        elif mom > 1: score -= 0.5
+        elif mom > 1: score -= 1
         factors += 1
 
     if factors > 0:
         normalized = round(score / factors, 2)
         result["buy_score"] = normalized
-        if normalized > 1:
-            result["overall_signal"] = "STRONG BUY"
-        elif normalized > 0.3:
-            result["overall_signal"] = "BUY"
-        elif normalized > -0.3:
-            result["overall_signal"] = "HOLD"
-        elif normalized > -1:
-            result["overall_signal"] = "WAIT"
-        else:
-            result["overall_signal"] = "OVERBOUGHT"
+        result["overall_signal"] = reading_for(normalized)
 
     return result
 
@@ -841,20 +864,12 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
     if history:
         result["usd_oz"] = history[-1].get("usd_oz")
 
-    # Technical-only prediction (always available)
-    # buy_score > 0 = oversold/dipping = BUY opportunity
-    # buy_score < 0 = overbought/rising = WAIT
-    score = ta.get("buy_score", 0)
-    if score > 1:
-        result["ta_outlook"] = i18n.t("ta.strong_buy", lang)
-    elif score > 0.3:
-        result["ta_outlook"] = i18n.t("ta.buy", lang)
-    elif score > -0.3:
-        result["ta_outlook"] = i18n.t("ta.hold", lang)
-    elif score > -1:
-        result["ta_outlook"] = i18n.t("ta.wait", lang)
-    else:
-        result["ta_outlook"] = i18n.t("ta.overbought", lang)
+    # Technical reading (always available once there is enough data). With
+    # too little data there is no reading, and no text — this used to default
+    # the score to 0 and describe a price it had not measured as "stable".
+    reading_key = _READING_TEXT.get(ta.get("overall_signal"))
+    if reading_key:
+        result["ta_outlook"] = i18n.t(reading_key, lang)
 
     # ML predictions (if models exist)
     models_dict = model_data.get("models", {})
