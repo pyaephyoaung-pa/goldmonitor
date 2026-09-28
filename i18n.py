@@ -214,6 +214,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "🎯 TA (1h): {signal} (score: {score})",
         "th": "🎯 TA (1 ชม.): {signal} (คะแนน: {score})",
     },
+    # What followed the current reading in the stored history, graded like the
+    # ML models (predictor.ta_track_record). "up" readings count higher
+    # prices, "down" readings lower ones.
+    "predict.ta_track_up": {
+        "en": "📐 Last {days}d after {signal}: higher {h}h later in {hits}/{n} cases ({rate}%) vs {base}% after any hour {verdict}",
+        "my": "📐 လွန်ခဲ့သော {days} ရက်: {signal} ပြပြီး {h} နာရီအကြာ ဈေးမြင့်သွားတာ {hits}/{n} ကြိမ် ({rate}%)၊ ပုံမှန်အချိန် {base}% {verdict}",
+        "th": "📐 {days} วันที่ผ่านมา หลัง {signal}: อีก {h} ชม. ราคาสูงขึ้น {hits}/{n} ครั้ง ({rate}%) เทียบกับ {base}% ของทุกชั่วโมง {verdict}",
+    },
+    "predict.ta_track_down": {
+        "en": "📐 Last {days}d after {signal}: lower {h}h later in {hits}/{n} cases ({rate}%) vs {base}% after any hour {verdict}",
+        "my": "📐 လွန်ခဲ့သော {days} ရက်: {signal} ပြပြီး {h} နာရီအကြာ ဈေးနိမ့်သွားတာ {hits}/{n} ကြိမ် ({rate}%)၊ ပုံမှန်အချိန် {base}% {verdict}",
+        "th": "📐 {days} วันที่ผ่านมา หลัง {signal}: อีก {h} ชม. ราคาต่ำลง {hits}/{n} ครั้ง ({rate}%) เทียบกับ {base}% ของทุกชั่วโมง {verdict}",
+    },
+    "predict.ta_track_none": {
+        "en": "📐 Last {days}d: no {signal} readings to check yet",
+        "my": "📐 လွန်ခဲ့သော {days} ရက်: စစ်ဆေးရန် {signal} မရှိသေးပါ",
+        "th": "📐 {days} วันที่ผ่านมา: ยังไม่มี {signal} ให้ตรวจสอบ",
+    },
 
     # ── /chart ──────────────────────────────────────────────────
     "chart.no_data": {

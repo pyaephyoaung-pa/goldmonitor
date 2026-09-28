@@ -207,7 +207,8 @@ def calc_support_resistance(prices: list, lookback: int = 48) -> dict:
 # 1h indicators show. They used to be orders — STRONG BUY, BUY, HOLD, WAIT —
 # and the strongest read "the best time to buy", but replayed over two years
 # of hourly gold the price was no likelier to be higher 24h after it than
-# after any other hour (55% vs 54%, p=0.43).
+# after any other hour (55% vs 54%, p=0.43). /predict now shows how each
+# reading has played out — see ta_track_record.
 READINGS = ("OVERSOLD", "DIPPING", "NEUTRAL", "RISING", "OVERBOUGHT")
 
 # The i18n text for each reading. predict() looks the text up by the label
@@ -701,6 +702,127 @@ def edge_significance(accuracy: float, baseline: float, n_test: int,
     return _binomial_tail(k, n_eff, baseline), n_eff
 
 
+# ── Does the TA reading mean anything? ──────────────────────────
+#
+# A model has to pass edge_significance before its forecast is shown as having
+# an edge. The TA reading never faced any test, and it used to tell every
+# subscriber "STRONG BUY — the best time to buy". So it gets the same kind of
+# test: once a day, replay analyze() over the stored history and record, for
+# each reading, how often the price was higher TA_TRACK_HORIZON hours later,
+# against how often it was higher after ANY hour of the same stretch.
+#
+# Readings come in runs — one sharp fall is several OVERSOLD hours in a row,
+# sharing most of one outcome — so, as for the models, only independent
+# windows count: a case is counted only if it starts at least one horizon
+# after the last counted case of the same reading.
+#
+# Only hours in which the price moved are graded. While the market is shut
+# the reading stays frozen at Friday's close and the price sits still, so a
+# weekend would count one stale reading again every `horizon` hours — and
+# score each of its flat outcomes as UP, since _went_up counts "at or above".
+
+TA_TRACK_HORIZON = 24
+# Rows skipped at the start of the history while the indicators settle.
+TA_TRACK_WARMUP = 50
+# Stamped on the stored record; one computed for other readings or by another
+# test is ignored rather than shown next to today's reading.
+TA_TRACK_VERSION = "readings-v1"
+# Which way the price would lean after each reading IF the reading carried
+# information. NEUTRAL implies nothing, so there is nothing to test.
+_IMPLIED_MOVE = {"OVERSOLD": "up", "DIPPING": "up",
+                 "RISING": "down", "OVERBOUGHT": "down"}
+
+
+def _binomial_head(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p)."""
+    return 1.0 - _binomial_tail(k + 1, n, p)
+
+
+def ta_track_record(history: list, horizon: int = TA_TRACK_HORIZON) -> dict | None:
+    """How the price moved after each TA reading in `history`.
+
+    For every directional reading: `n` independent cases, `ups` of them
+    followed by a higher price `horizon` hours later, and whether that beats
+    the stretch's own base rate (`base_up`) in the direction the reading
+    implies, by the one-sided binomial test at EDGE_P_VALUE. None if no row
+    has a matured outcome yet.
+    """
+    timeline = _timeline(history)
+    graded = []  # (time, reading, went_up)
+    last_price = None
+    for idx, row in enumerate(history):
+        price = row.get("thb_gram") if isinstance(row, dict) else None
+        moved = price is not None and last_price is not None and price != last_price
+        if price is not None:
+            last_price = price
+        if idx < TA_TRACK_WARMUP or not moved:
+            continue
+        went_up = _build_labels(history, idx, horizon, timeline)
+        if went_up is None:
+            continue
+        reading = analyze(history[:idx + 1]).get("overall_signal")
+        if reading:
+            graded.append((_entry_time(history[idx]), reading, went_up))
+    if not graded:
+        return None
+
+    base_up = sum(up for _, _, up in graded) / len(graded)
+    readings = {}
+    for name, move in _IMPLIED_MOVE.items():
+        cases, last = [], None
+        for t, reading, up in graded:
+            if reading == name and (last is None
+                                    or t - last >= timedelta(hours=horizon)):
+                cases.append(up)
+                last = t
+        n, ups = len(cases), sum(cases)
+        if not n:
+            readings[name] = {"n": 0, "ups": 0, "has_edge": False}
+            continue
+        if move == "up":
+            p_value = _binomial_tail(ups, n, base_up)
+            beats = ups / n > base_up
+        else:
+            p_value = _binomial_head(ups, n, base_up)
+            beats = ups / n < base_up
+        readings[name] = {"n": n, "ups": ups, "p_value": round(p_value, 4),
+                          "has_edge": beats and p_value < EDGE_P_VALUE}
+
+    times = timeline[0]
+    return {
+        "version": TA_TRACK_VERSION,
+        "horizon": horizon,
+        "base_up": round(base_up, 4),
+        "days": max(1, round((times[-1] - times[0]).total_seconds() / 86400)),
+        "readings": readings,
+    }
+
+
+def _stored_track(model_data: dict, reading: str | None) -> dict | None:
+    """The nightly record for `reading`, if one is stored and usable.
+
+    It comes back from a shared store, so every field is checked rather than
+    trusted — /predict must not crash on a hand-edited Gist.
+    """
+    track = model_data.get("ta_track")
+    if (reading not in _IMPLIED_MOVE or not isinstance(track, dict)
+            or track.get("version") != TA_TRACK_VERSION):
+        return None
+    readings = track.get("readings")
+    rec = readings.get(reading) if isinstance(readings, dict) else None
+    if not isinstance(rec, dict):
+        return None
+    n, ups = rec.get("n"), rec.get("ups")
+    base, days, horizon = track.get("base_up"), track.get("days"), track.get("horizon")
+    if not (isinstance(n, int) and isinstance(ups, int) and 0 <= ups <= n
+            and isinstance(base, (int, float)) and 0 <= base <= 1
+            and isinstance(days, int) and isinstance(horizon, int)):
+        return None
+    return {"reading": reading, "move": _IMPLIED_MOVE[reading], "n": n,
+            "ups": ups, "base_up": base, "days": days, "horizon": horizon,
+            "has_edge": rec.get("has_edge") is True}
+
+
 def train_model(history: list) -> dict | None:
     """Train gradient boosting models for 4h, 12h, 24h prediction.
 
@@ -874,6 +996,9 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
     reading_key = _READING_TEXT.get(ta.get("overall_signal"))
     if reading_key:
         result["ta_outlook"] = i18n.t(reading_key, lang)
+    track = _stored_track(model_data, ta.get("overall_signal"))
+    if track:
+        result["ta_track"] = track
 
     # ML predictions (if models exist)
     models_dict = model_data.get("models", {})
@@ -1208,6 +1333,22 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
     if ta.get("overall_signal"):
         lines.append(i18n.t("predict.tech_signal", lang,
                             signal=ta["overall_signal"], score=ta.get("buy_score", "?")))
+
+    # What followed this reading before — see ta_track_record.
+    track = prediction.get("ta_track")
+    if track and track["n"]:
+        up = track["move"] == "up"
+        hits = track["ups"] if up else track["n"] - track["ups"]
+        base = track["base_up"] if up else 1 - track["base_up"]
+        lines.append(i18n.t(
+            "predict.ta_track_up" if up else "predict.ta_track_down", lang,
+            days=track["days"], signal=track["reading"], h=track["horizon"],
+            hits=hits, n=track["n"], rate=round(hits / track["n"] * 100),
+            base=round(base * 100),
+            verdict="✅edge" if track["has_edge"] else "⚠️no-edge"))
+    elif track:
+        lines.append(i18n.t("predict.ta_track_none", lang,
+                            days=track["days"], signal=track["reading"]))
 
     # ML Predictions
     if prediction.get("predictions"):

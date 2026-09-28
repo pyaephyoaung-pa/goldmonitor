@@ -564,6 +564,25 @@ def main():
         model_data = storage.load_model_data()
         last_trained = model_data.get("last_trained", "")
         today = now.strftime("%Y-%m-%d")
+        dirty = False
+
+        # How the TA reading has actually played out, graded the way the
+        # models are (predictor.ta_track_record). Pure stdlib, so it does not
+        # wait on the ML extras; once a day, like the models. Wrapped so a
+        # statistic about the signal can never cost the night's retrain.
+        track = model_data.get("ta_track")
+        if not (isinstance(track, dict)
+                and str(track.get("computed") or "")[:10] == today):
+            try:
+                track = predictor.ta_track_record(history)
+            except Exception as e:
+                print(f"[TA] track record failed: {e}")
+                track = None
+            if track:
+                track["computed"] = now.isoformat()
+                model_data["ta_track"] = track
+                dirty = True
+
         if not last_trained or last_trained[:10] != today:
             if not predictor.ml_available():
                 # numpy + scikit-learn live in requirements-ml.txt and are
@@ -582,7 +601,7 @@ def main():
                         i18n.t("monitor.ml_deps_missing",
                                storage.get_user_lang(TG_CHAT_ID)), TG_CHAT_ID)
                     model_data["ml_warned_on"] = today
-                    storage.save_model_data(model_data)
+                    dirty = True
             else:
                 print("[ML] Training prediction models...")
                 new_model = predictor.train_model(history)
@@ -592,10 +611,13 @@ def main():
                     # "predictions" accuracy log that the live hit-rate is built
                     # from — erasing weeks of scored forecasts on every retrain.
                     model_data.update(new_model)
-                    storage.save_model_data(model_data)
-                    print("[ML] Models saved to Gist")
+                    dirty = True
                 else:
                     print("[ML] Training skipped or failed")
+
+        # One write for everything this block changed.
+        if dirty and storage.save_model_data(model_data):
+            print("[ML] Model data saved to Gist")
 
     # ── Webhook watchdog ────────────────────────────────────────
     # Runs here, not just in the poller, because the poller workflow can be

@@ -21,6 +21,9 @@ BUY":
      likelier to be higher 24h later than after any other hour (55% vs 54%,
      p=0.43). And when the ML had no edge, its note sent users to that
      reading: "rely on the TA signal below".
+
+  5. So the reading now faces the test the models do, every night, and
+     /predict shows what followed it.
 """
 import contextlib
 import io
@@ -199,3 +202,110 @@ def test_the_reading_names_its_timeframe():
     prediction = predictor.predict(_walk(4, 200), {})
     msg = predictor.format_prediction_message(prediction, "en")
     assert "RSI (1h)" in msg and "TA (1h)" in msg
+
+
+# ── 5. The reading gets the models' test ────────────────────────
+
+def _crash_and_recover(seed, n=720, every=48):
+    """Noise, plus a sharp fall every two days that always recovers within a
+    day. A reading that fires on the fall really does have an edge here."""
+    rnd, t0 = random.Random(seed), BKK.localize(datetime(2026, 1, 1))
+    price, out = 4000.0, []
+    for i in range(n):
+        phase = i % every
+        step = (-0.005 if phase < 6 else 0.003 if phase < 24
+                else rnd.gauss(0, 0.0015))
+        price *= 1 + step + rnd.gauss(0, 0.0003)
+        ts = t0 + timedelta(hours=i)
+        out.append({"ts": ts.isoformat(), "thb_gram": round(price, 2),
+                    "hour": ts.hour, "weekday": ts.weekday()})
+    return out
+
+
+def test_noise_does_not_earn_a_reading_an_edge():
+    """Measured: 4 false edges in 200 walks of 720h (2%), across all four
+    directional readings together. None in these."""
+    for seed in range(40):
+        rec = predictor.ta_track_record(_walk(seed, 400))
+        assert not any(r["has_edge"] for r in rec["readings"].values()), seed
+
+
+def test_a_reading_that_works_is_found():
+    """A test that never fires would also pass the noise check. Measured:
+    found in 20 of 20 of these series."""
+    for seed in range(3):
+        oversold = predictor.ta_track_record(
+            _crash_and_recover(seed))["readings"]["OVERSOLD"]
+        assert oversold["has_edge"] is True, (seed, oversold)
+        assert oversold["ups"] == oversold["n"] >= 10
+
+
+def test_a_run_of_one_reading_counts_once(monkeypatch):
+    """Ten OVERSOLD hours in a row share almost all of one outcome. Counted
+    one by one, a single bounce would look like ten."""
+    runs = set(range(100, 110)) | {115} | set(range(140, 146))
+    monkeypatch.setattr(predictor, "analyze", lambda h: {
+        "overall_signal": "OVERSOLD" if len(h) - 1 in runs else "NEUTRAL"})
+    rec = predictor.ta_track_record(_walk(5, 220))
+    # 100 counts; 101-109 and 115 fall inside its 24h window; 140 does not.
+    assert rec["readings"]["OVERSOLD"]["n"] == 2
+
+
+def _falling():
+    return _hist([4000 - 12 * i for i in range(120)])
+
+
+def _record(**readings):
+    return {"version": predictor.TA_TRACK_VERSION, "horizon": 24,
+            "base_up": 0.54, "days": 30, "readings": readings}
+
+
+def test_predict_shows_what_followed_the_reading():
+    assert predictor.analyze(_falling())["overall_signal"] == "OVERSOLD"
+    model_data = {"ta_track": _record(
+        OVERSOLD={"n": 9, "ups": 5, "p_value": 0.5, "has_edge": False})}
+    msg = predictor.format_prediction_message(
+        predictor.predict(_falling(), model_data), "en")
+    assert "after OVERSOLD: higher 24h later in 5/9 cases (56%) vs 54%" in msg
+    assert "⚠️no-edge" in msg
+
+
+def test_a_falling_side_reading_is_graded_on_falls():
+    rising = _hist([round(4000 * 1.003 ** i, 2) for i in range(120)])
+    model_data = {"ta_track": _record(
+        OVERBOUGHT={"n": 8, "ups": 2, "p_value": 0.03, "has_edge": True})}
+    msg = predictor.format_prediction_message(
+        predictor.predict(rising, model_data), "en")
+    assert "lower 24h later in 6/8 cases (75%) vs 46%" in msg
+    assert "✅edge" in msg
+
+
+def test_a_reading_with_no_past_cases_says_so():
+    model_data = {"ta_track": _record(OVERSOLD={"n": 0, "ups": 0, "has_edge": False})}
+    msg = predictor.format_prediction_message(
+        predictor.predict(_falling(), model_data), "en")
+    assert "no OVERSOLD readings to check yet" in msg
+
+
+def test_a_stale_or_mangled_record_is_not_shown():
+    """It is read back from a shared store: /predict must not crash on it."""
+    good = _record(OVERSOLD={"n": 4, "ups": 2, "has_edge": False})
+    assert "ta_track" in predictor.predict(_falling(), {"ta_track": good})
+    for bad in (dict(good, version="older"), dict(good, readings=[]),
+                _record(OVERSOLD={"n": "4", "ups": 2}),
+                _record(OVERSOLD={"n": 4, "ups": 9}),
+                dict(good, base_up=None), dict(good, days="30"), "junk", None):
+        out = predictor.predict(_falling(), {"ta_track": bad})
+        assert "ta_track" not in out, bad
+        predictor.format_prediction_message(out, "en")
+
+
+def test_a_closed_market_is_not_graded(monkeypatch):
+    """A weekend freezes both the reading and the price. Graded, it would
+    count Friday's reading again every 24h and score each flat outcome UP."""
+    history = _walk(6, 220)
+    for row in history[101:161]:  # 60 closed hours after Friday's close at 100
+        row["thb_gram"] = history[100]["thb_gram"]
+    monkeypatch.setattr(predictor, "analyze", lambda h: {
+        "overall_signal": "OVERSOLD" if 100 <= len(h) - 1 <= 160 else "NEUTRAL"})
+    assert predictor.ta_track_record(history)["readings"]["OVERSOLD"]["n"] == 1
