@@ -15,6 +15,12 @@ BUY":
   3. The composite was lopsided: the falling side reached +1.2, the rising
      side only -0.9, so OVERBOUGHT (-1 or lower) could never fire — and did
      not, once, in two years — while BUY or STRONG BUY covered 45% of hours.
+
+  4. The top reading told every subscriber "STRONG BUY — the best time to
+     buy". Replayed with the test the ML models must pass, the price was no
+     likelier to be higher 24h later than after any other hour (55% vs 54%,
+     p=0.43). And when the ML had no edge, its note sent users to that
+     reading: "rely on the TA signal below".
 """
 import contextlib
 import io
@@ -23,6 +29,7 @@ from datetime import datetime, timedelta
 
 import pytz
 
+import i18n
 import predictor
 
 BKK = pytz.timezone("Asia/Bangkok")
@@ -159,3 +166,36 @@ def test_no_reading_without_data():
     "stable" — describing a price it had not measured."""
     out = predictor.predict(_hist([4000.0, 4001.0, 4002.0]), {})
     assert "ta_outlook" not in out
+
+
+# ── 4. Readings describe; they do not advise ────────────────────
+
+_ADVICE = {"en": ("buy", "sell"), "my": ("ဝယ်", "ရောင်း"), "th": ("ซื้อ", "ขาย")}
+_TA_TEXT = [predictor._READING_TEXT[r] for r in predictor.READINGS] + [
+    "ta.no_edge", "ta.bullish", "ta.bearish", "ta.mixed"]
+
+
+def test_no_reading_tells_anyone_to_buy_or_sell():
+    for key in _TA_TEXT:
+        for lang, words in _ADVICE.items():
+            text = i18n.t(key, lang).lower()
+            assert not any(w in text for w in words), (key, lang, text)
+
+
+def test_the_ml_note_does_not_send_users_to_the_ta_reading():
+    for lang in _ADVICE:
+        text = i18n.t("ta.no_edge", lang)
+        assert "TA" not in text and "rely" not in text, (lang, text)
+
+
+def test_every_reading_the_score_can_produce_has_text():
+    for score in (1.2, 0.5, 0.0, -0.5, -1.2):
+        key = predictor._READING_TEXT[predictor.reading_for(score)]
+        assert key in i18n.STRINGS
+
+
+def test_the_reading_names_its_timeframe():
+    """RSI(14) here is 14 HOURS. Unlabelled, it was read as the daily RSI."""
+    prediction = predictor.predict(_walk(4, 200), {})
+    msg = predictor.format_prediction_message(prediction, "en")
+    assert "RSI (1h)" in msg and "TA (1h)" in msg

@@ -146,14 +146,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "\n📊 <b>การเปลี่ยนแปลง:</b>",
     },
     "price.signal": {
-        "en": "\n🎯 Signal: <b>{signal}</b>",
-        "my": "\n🎯 Signal: <b>{signal}</b>",
-        "th": "\n🎯 สัญญาณ: <b>{signal}</b>",
+        "en": "\n🎯 TA (1h): <b>{signal}</b>",
+        "my": "\n🎯 TA (1h): <b>{signal}</b>",
+        "th": "\n🎯 TA (1 ชม.): <b>{signal}</b>",
     },
     "price.rsi": {
-        "en": "📊 RSI: {value}",
-        "my": "📊 RSI: {value}",
-        "th": "📊 RSI: {value}",
+        "en": "📊 RSI (1h): {value}",
+        "my": "📊 RSI (1h): {value}",
+        "th": "📊 RSI (1 ชม.): {value}",
     },
 
     # ── /predict ────────────────────────────────────────────────
@@ -210,9 +210,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "🎯 ความแม่นยำจริง: {parts}",
     },
     "predict.tech_signal": {
-        "en": "🎯 Technical Signal: {signal} (score: {score})",
-        "my": "🎯 Technical Signal: {signal} (score: {score})",
-        "th": "🎯 สัญญาณเทคนิค: {signal} (คะแนน: {score})",
+        "en": "🎯 TA (1h): {signal} (score: {score})",
+        "my": "🎯 TA (1h): {signal} (score: {score})",
+        "th": "🎯 TA (1 ชม.): {signal} (คะแนน: {score})",
     },
 
     # ── /chart ──────────────────────────────────────────────────
@@ -1136,9 +1136,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "\n📊 แนวโน้ม: {parts}",
     },
     "monitor.ta_signal": {
-        "en": "\n🎯 Signal: {signal}",
-        "my": "\n🎯 Signal: {signal}",
-        "th": "\n🎯 สัญญาณ: {signal}",
+        "en": "\n🎯 TA (1h): {signal}",
+        "my": "\n🎯 TA (1h): {signal}",
+        "th": "\n🎯 TA (1 ชม.): {signal}",
     },
     "monitor.drop": {
         "en": ("{emoji} <b>{title}!</b>\n"
@@ -1467,39 +1467,40 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "🏆 กำไรมาก — พิจารณาขาย!",
     },
 
-    # ── Technical-analysis outlooks (/predict) ──────────────────
-    "ta.strong_buy": {
-        "en": "🟢 STRONG BUY — oversold, the best time to buy",
-        "my": "🟢 STRONG BUY — ဈေး oversold ဖြစ်နေ၊ ဝယ်ရန် အကောင်းဆုံးအချိန်",
-        "th": "🟢 STRONG BUY — ขายมากเกินไป เป็นจังหวะซื้อที่ดีที่สุด",
+    # ── Technical-analysis readings (/predict) ──────────────────
+    # They describe what the 1h indicators show. They do not tell anyone to
+    # buy or sell: replayed over two years of hourly gold, the price did no
+    # better after the old "STRONG BUY — the best time to buy" than after any
+    # other hour.
+    "ta.oversold": {
+        "en": "📉 OVERSOLD — sharp fall across the 1h indicators; describes the move, not a forecast",
+        "my": "📉 OVERSOLD — 1h indicator များအားလုံးတွင် ဈေးပြင်းပြင်းကျထားသည်။ ဖြစ်ပြီးသားကို ပြခြင်းသာ၊ ခန့်မှန်းချက် မဟုတ်ပါ",
+        "th": "📉 OVERSOLD — ร่วงแรงในตัวชี้วัด 1 ชม. บอกสิ่งที่เกิดขึ้นแล้ว ไม่ใช่การพยากรณ์",
     },
-    "ta.buy": {
-        "en": "🟡 BUY — price is dipping, consider buying",
-        "my": "🟡 BUY — ဈေးကျနေ၊ ဝယ်ရန် စဉ်းစားပါ",
-        "th": "🟡 BUY — ราคาย่อลง พิจารณาซื้อ",
+    "ta.dipping": {
+        "en": "↘️ DIPPING — below its recent 1h average",
+        "my": "↘️ DIPPING — 1h ပျမ်းမျှထက် ဈေးနိမ့်နေသည်",
+        "th": "↘️ DIPPING — ต่ำกว่าค่าเฉลี่ย 1 ชม. ล่าสุด",
     },
-    "ta.hold": {
-        "en": "⚪ HOLD — price is stable, keep watching",
-        "my": "⚪ HOLD — ဈေးတည်ငြိမ်နေ၊ စောင့်ကြည့်ပါ",
-        "th": "⚪ HOLD — ราคานิ่ง เฝ้าดูต่อไป",
+    "ta.neutral": {
+        "en": "➡️ NEUTRAL — no clear move on the 1h chart",
+        "my": "➡️ NEUTRAL — 1h chart တွင် ထင်ရှားသော လှုပ်ရှားမှု မရှိပါ",
+        "th": "➡️ NEUTRAL — ไม่มีการเคลื่อนไหวชัดเจนบนกราฟ 1 ชม.",
     },
-    "ta.wait": {
-        "en": "🟠 WAIT — price is rising, not a good entry yet",
-        "my": "🟠 WAIT — ဈေးတက်နေ၊ ဝယ်ဖို့ မသင့်သေး",
-        "th": "🟠 WAIT — ราคากำลังขึ้น ยังไม่ควรซื้อ",
+    "ta.rising": {
+        "en": "↗️ RISING — above its recent 1h average",
+        "my": "↗️ RISING — 1h ပျမ်းမျှထက် ဈေးမြင့်နေသည်",
+        "th": "↗️ RISING — สูงกว่าค่าเฉลี่ย 1 ชม. ล่าสุด",
     },
     "ta.overbought": {
-        "en": "🔴 OVERBOUGHT — price is very high, do not buy",
-        "my": "🔴 OVERBOUGHT — ဈေးအလွန်မြင့်နေ၊ မဝယ်သင့်",
-        "th": "🔴 OVERBOUGHT — ราคาสูงมาก ไม่ควรซื้อ",
+        "en": "📈 OVERBOUGHT — sharp rise across the 1h indicators; describes the move, not a forecast",
+        "my": "📈 OVERBOUGHT — 1h indicator များအားလုံးတွင် ဈေးပြင်းပြင်းတက်ထားသည်။ ဖြစ်ပြီးသားကို ပြခြင်းသာ၊ ခန့်မှန်းချက် မဟုတ်ပါ",
+        "th": "📈 OVERBOUGHT — ขึ้นแรงในตัวชี้วัด 1 ชม. บอกสิ่งที่เกิดขึ้นแล้ว ไม่ใช่การพยากรณ์",
     },
     "ta.no_edge": {
-        "en": ("⚠️ ML models show no historical edge over a coin-flip — "
-               "treat ML as noise; rely on the TA signal below"),
-        "my": ("⚠️ ML models show no historical edge over a coin-flip — "
-               "treat ML as noise; rely on the TA signal below"),
-        "th": ("⚠️ โมเดล ML ไม่มีความได้เปรียบเหนือการเดาสุ่ม — "
-               "ถือว่าเป็น noise ให้ดูสัญญาณ TA ด้านล่างแทน"),
+        "en": "⚠️ ML models show no historical edge over a coin-flip — treat their calls as noise",
+        "my": "⚠️ ML models show no historical edge over a coin-flip — treat their calls as noise",
+        "th": "⚠️ โมเดล ML ไม่มีความได้เปรียบเหนือการเดาสุ่ม — ถือว่าเป็น noise",
     },
     "ta.bullish": {
         "en": "ML models (with edge) lean BULLISH",
@@ -1507,9 +1508,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "โมเดล ML (ที่มี edge) เอนไปทาง BULLISH",
     },
     "ta.bearish": {
-        "en": "ML models (with edge) lean BEARISH — consider buying",
-        "my": "ML models (with edge) lean BEARISH — consider buying",
-        "th": "โมเดล ML (ที่มี edge) เอนไปทาง BEARISH — พิจารณาซื้อ",
+        "en": "ML models (with edge) lean BEARISH",
+        "my": "ML models (with edge) lean BEARISH",
+        "th": "โมเดล ML (ที่มี edge) เอนไปทาง BEARISH",
     },
     "ta.mixed": {
         "en": "ML models (with edge) are MIXED",

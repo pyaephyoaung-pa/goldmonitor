@@ -203,29 +203,33 @@ def calc_support_resistance(prices: list, lookback: int = 48) -> dict:
 
 # ── The overall reading ─────────────────────────────────────────
 
-# From the strongest fall to the strongest rise.
-READINGS = ("STRONG BUY", "BUY", "HOLD", "WAIT", "OVERBOUGHT")
+# From the strongest fall to the strongest rise. The names describe what the
+# 1h indicators show. They used to be orders — STRONG BUY, BUY, HOLD, WAIT —
+# and the strongest read "the best time to buy", but replayed over two years
+# of hourly gold the price was no likelier to be higher 24h after it than
+# after any other hour (55% vs 54%, p=0.43).
+READINGS = ("OVERSOLD", "DIPPING", "NEUTRAL", "RISING", "OVERBOUGHT")
 
 # The i18n text for each reading. predict() looks the text up by the label
 # analyze() chose instead of re-deriving it from the score, so the two can
 # never disagree.
 _READING_TEXT = {
-    "STRONG BUY": "ta.strong_buy", "BUY": "ta.buy", "HOLD": "ta.hold",
-    "WAIT": "ta.wait", "OVERBOUGHT": "ta.overbought",
+    "OVERSOLD": "ta.oversold", "DIPPING": "ta.dipping", "NEUTRAL": "ta.neutral",
+    "RISING": "ta.rising", "OVERBOUGHT": "ta.overbought",
 }
 
 
 def reading_for(score: float) -> str:
     """The label for a composite score. The thresholds mirror each other
-    around zero, so +x and -x sit the same distance from HOLD."""
+    around zero, so +x and -x sit the same distance from NEUTRAL."""
     if score > 1:
-        return "STRONG BUY"
+        return "OVERSOLD"
     if score > 0.3:
-        return "BUY"
+        return "DIPPING"
     if score >= -0.3:
-        return "HOLD"
+        return "NEUTRAL"
     if score >= -1:
-        return "WAIT"
+        return "RISING"
     return "OVERBOUGHT"
 
 
@@ -254,9 +258,9 @@ def analyze(history: list) -> dict:
     result["rsi"] = rsi
     if rsi is not None:
         if rsi < 30:
-            result["rsi_signal"] = "OVERSOLD — buy opportunity"
+            result["rsi_signal"] = "OVERSOLD"
         elif rsi > 70:
-            result["rsi_signal"] = "OVERBOUGHT — consider waiting"
+            result["rsi_signal"] = "OVERBOUGHT"
         else:
             result["rsi_signal"] = "NEUTRAL"
 
@@ -293,9 +297,9 @@ def analyze(history: list) -> dict:
     result["bollinger"] = bb
     if bb:
         if bb["position"] < 10:
-            result["bb_signal"] = "NEAR LOWER BAND — potential bounce/buy"
+            result["bb_signal"] = "NEAR LOWER BAND"
         elif bb["position"] > 90:
-            result["bb_signal"] = "NEAR UPPER BAND — potential pullback"
+            result["bb_signal"] = "NEAR UPPER BAND"
         else:
             result["bb_signal"] = "WITHIN BANDS"
 
@@ -323,8 +327,8 @@ def analyze(history: list) -> dict:
     # RISEN. Every weight is mirrored, so the score runs -1.2..+1.2 and both
     # ends can be reached. It used to be lopsided — an unchanged SMA pair
     # counted as "dipping", and the rising side topped out at -0.9 — so in two
-    # years of replayed hourly gold OVERBOUGHT never fired once, while BUY or
-    # STRONG BUY covered 45% of all hours.
+    # years of replayed hourly gold OVERBOUGHT never fired once, while the two
+    # falling-side readings covered 45% of all hours.
     score = 0.0
     factors = 0
 
@@ -1156,7 +1160,7 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
             rsi_bar = "▓▓▓▓░ High"
         else:
             rsi_bar = "▓▓▓▓▓ Overbought"
-        lines.append(f"📊 RSI: {rsi} [{rsi_bar}]")
+        lines.append(f"📊 RSI (1h): {rsi} [{rsi_bar}]")
 
     lines.append("━━━━━━━━━━━━━━━")
 
