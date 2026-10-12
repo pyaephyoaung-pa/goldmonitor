@@ -619,6 +619,18 @@ def main():
         if dirty and storage.save_model_data(model_data):
             print("[ML] Model data saved to Gist")
 
+    # ── Input watchdogs (owner only) ────────────────────────────
+    # A price source answering with a frozen quote, and an event calendar about
+    # to run out, both fail without an error. Same contract as the webhook
+    # check below: throttled through _bot_state, never raising.
+    try:
+        feed = bot_core.warn_owner_if_feed_stuck(_bot_state, history, usd_oz, now)
+        calendar = bot_core.warn_owner_if_calendar_stale(_bot_state, now)
+        if feed or calendar:
+            storage.save_bot_state(_bot_state)
+    except Exception as e:
+        print(f"[monitor] input checks failed: {e}")
+
     # ── Webhook watchdog ────────────────────────────────────────
     # Runs here, not just in the poller, because the poller workflow can be
     # disabled — and was, for three months, while a broken webhook silently

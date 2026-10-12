@@ -121,6 +121,21 @@ CALENDAR = [
     ("2026-11-10", "cpi"),   # October 2026 data
     ("2026-12-10", "cpi"),   # November 2026 data
 
+    # ── CPI 2027 — VERIFIED against bls.gov/schedule/news_release/cpi.htm
+    #    on 2026-10-12, row by row (reference month | release date | time).
+    ("2027-01-13", "cpi"),   # December 2026 data
+    ("2027-02-11", "cpi"),   # January 2027 data
+    ("2027-03-10", "cpi"),   # February 2027 data
+    ("2027-04-13", "cpi"),   # March 2027 data
+    ("2027-05-12", "cpi"),   # April 2027 data
+    ("2027-06-10", "cpi"),   # May 2027 data
+    ("2027-07-14", "cpi"),   # June 2027 data
+    ("2027-08-11", "cpi"),   # July 2027 data
+    ("2027-09-14", "cpi"),   # August 2027 data
+    ("2027-10-14", "cpi"),   # September 2027 data
+    ("2027-11-10", "cpi"),   # October 2027 data
+    ("2027-12-10", "cpi"),   # November 2027 data
+
     # ── NFP 2026 — VERIFIED against bls.gov/schedule/news_release/empsit.htm
     #    on 2026-09-22. 08:30 ET.
     #
@@ -131,6 +146,23 @@ CALENDAR = [
     ("2026-10-02", "nfp"),   # September 2026 data
     ("2026-11-06", "nfp"),   # October 2026 data
     ("2026-12-04", "nfp"),   # November 2026 data
+
+    # ── NFP 2027 — VERIFIED against bls.gov/schedule/news_release/empsit.htm
+    #    on 2026-10-12, row by row.
+    ("2027-01-08", "nfp"),   # December 2026 data
+    ("2027-02-05", "nfp"),   # January 2027 data
+    ("2027-03-05", "nfp"),   # February 2027 data
+    ("2027-04-02", "nfp"),   # March 2027 data
+    ("2027-05-07", "nfp"),   # April 2027 data
+    ("2027-06-04", "nfp"),   # May 2027 data
+    ("2027-07-02", "nfp"),   # June 2027 data
+    ("2027-08-06", "nfp"),   # July 2027 data
+    ("2027-09-03", "nfp"),   # August 2027 data
+    ("2027-10-08", "nfp"),   # September 2027 data
+    ("2027-11-05", "nfp"),   # October 2027 data
+    ("2027-12-03", "nfp"),   # November 2027 data
+    # PCE 2027 is not out yet: bea.gov/news/schedule listed only 2026 on
+    # 2026-10-12. calendar_status() warns before the 2026 PCE dates run out.
 ]
 
 # Some releases follow a published rule rather than an ad-hoc date, so they can
@@ -326,18 +358,34 @@ def hours_to_next(now: datetime | None = None, cap: float = 999.0) -> float:
 
 
 def calendar_status(now: datetime | None = None) -> dict:
-    """How much hand-maintained calendar is left.
+    """How much hand-maintained calendar is left, for each kind of release.
 
-    The generated NFP estimates are excluded on purpose: they never run out,
-    so counting them would hide the fact that the FOMC/CPI table needs a
-    top-up.
+    Judged per TYPE, not by the last event overall. FOMC was listed through
+    December 2027 while CPI and PCE stopped in December 2026, so measured by
+    the last event the table looked fine for 422 more days — while two of its
+    four releases were weeks from vanishing without a word. `days_left` is now
+    the runway of the type that runs out first, and `short` names every type
+    under STALE_AFTER_DAYS.
+
+    Only types the table actually lists are judged. The generated NFP
+    estimates are excluded on purpose: they never run out, so counting them
+    would hide the fact that the verified dates need a top-up.
     """
     now = _now_utc(now)
     future = [e for e in all_events() if e.when_utc > now]
-    days_left = (future[-1].when_utc - now).days if future else 0
+    tracked = [t for t in EVENT_TYPES if any(t == type_ for _, type_ in CALENDAR)]
+    runway = {}
+    for type_ in tracked:
+        dates = [e.when_utc for e in future if e.type == type_]
+        runway[type_] = (dates[-1] - now).days if dates else 0
+    short = sorted((t for t, d in runway.items() if d < STALE_AFTER_DAYS),
+                   key=runway.get)
+    days_left = min(runway.values()) if runway else 0
     return {
         "future_events": len(future),
         "days_left": days_left,
-        "stale": days_left < STALE_AFTER_DAYS,
+        "runway": runway,
+        "short": short,
+        "stale": bool(short) or not future,
         "last": future[-1] if future else None,
     }

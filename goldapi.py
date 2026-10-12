@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime, timedelta
 
+import pytz
 import requests
 
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
@@ -134,3 +136,62 @@ def get_gold_price(retries: int = 2) -> tuple:
             time.sleep(10)
 
     return None, None, None
+
+
+# ── Has the source stopped moving? ──────────────────────────────
+#
+# A source can fail by ANSWERING: a cached or frozen quote looks exactly like a
+# good one, so fetch_spot_usd never falls through to the next source. And the
+# TA reading treats a repeated price as a closed market (predictor.
+# trading_prices), so a source stuck on a weekday would freeze the reading and
+# every alert without a word. The monitor checks the price against the stored
+# history and the trading week.
+
+EASTERN = pytz.timezone("US/Eastern")
+
+# Trading hours a spot price may sit unchanged before the source is suspect.
+# Live spot moves every few seconds; even a quiet Asian session changes it
+# within minutes.
+STUCK_AFTER_OPEN_HOURS = 3.0
+
+
+def market_should_be_open(t: datetime) -> bool:
+    """Spot gold trades from 18:00 Sunday to 17:00 Friday New York time, with a
+    daily pause from 17:00 to 18:00. Holidays are not modelled: one can make a
+    quiet source look stuck, which costs the owner one warning."""
+    et = t.astimezone(EASTERN)
+    day, hour = et.weekday(), et.hour  # Monday = 0
+    if day == 5:
+        return False
+    if day == 6:
+        return hour >= 18
+    if day == 4 and hour >= 17:
+        return False
+    return hour != 17
+
+
+def hours_frozen(history: list, usd_oz: float, now: datetime) -> float:
+    """Trading hours spot has sat at exactly `usd_oz`, per the stored history.
+
+    Walks back over the latest points that carry this price and counts, in
+    15-minute steps from the earliest of them to `now`, only the time the
+    market should have been open — a weekend of one price is normal, three
+    weekday hours of it are not. 0.0 if the newest stored price differs.
+    """
+    since = None
+    for row in reversed(history):
+        if not isinstance(row, dict) or row.get("usd_oz") is None:
+            continue
+        if row["usd_oz"] != usd_oz:
+            break
+        try:
+            since = datetime.fromisoformat(row["ts"])
+        except (KeyError, TypeError, ValueError):
+            break
+    if since is None or since.tzinfo is None:
+        return 0.0
+    step, t, open_steps = timedelta(minutes=15), since, 0
+    while t < now:
+        open_steps += market_should_be_open(t)
+        t += step
+    return open_steps / 4

@@ -922,6 +922,17 @@ STRINGS: dict[str, dict[str, str]] = {
                "เดียวกับ Vercel หรือลบ webhook (<code>--delete</code>) "
                "แล้วเปิด workflow poller อีกครั้ง"),
     },
+    "monitor.feed_stuck": {
+        "en": ("⚠️ <b>Spot has not moved for {hours}h of trading</b> ({price}/oz)\n"
+               "The price source may be stuck — alerts and the TA reading stay "
+               "frozen until it moves. A market holiday can also cause this."),
+        "my": ("⚠️ <b>ဈေးကွက်ဖွင့်ချိန် {hours} နာရီကြာ spot ဈေး မပြောင်းပါ</b> ({price}/oz)\n"
+               "Price source ရပ်နေခြင်း ဖြစ်နိုင်သည် — ဈေးပြန်မလှုပ်မချင်း alerts နှင့် "
+               "TA reading ရပ်နေမည်။ ဈေးကွက် ပိတ်ရက်ကြောင့်လည်း ဖြစ်နိုင်သည်။"),
+        "th": ("⚠️ <b>ราคา spot ไม่ขยับมา {hours} ชม. ของเวลาซื้อขาย</b> ({price}/oz)\n"
+               "แหล่งราคาอาจค้าง — การแจ้งเตือนและ TA จะหยุดนิ่งจนกว่าราคาจะขยับ "
+               "วันหยุดตลาดก็ทำให้เกิดได้"),
+    },
     "webhook.broken_backlog": {
         "en": ("⚠️ <b>Webhook backlog building up</b>\n"
                "{pending} updates pending and not clearing.\n"
@@ -1053,12 +1064,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": "ℹ️ ราคาทองมักผันผวนแรงช่วงนี้ — บอกเวลาเท่านั้น ไม่ใช่การพยากรณ์",
     },
     "events.stale": {
-        "en": ("⚠️ <b>Calendar needs updating</b> — only {days}d of events left.\n"
-               "Refresh CALENDAR in events.py from federalreserve.gov / bls.gov."),
-        "my": ("⚠️ <b>Calendar update လိုအပ်သည်</b> — {days} ရက်စာသာ ကျန်တော့သည်။\n"
-               "events.py ထဲရှိ CALENDAR ကို federalreserve.gov / bls.gov မှ ပြန်ဖြည့်ပါ။"),
-        "th": ("⚠️ <b>ต้องอัปเดตปฏิทิน</b> — เหลือเหตุการณ์อีกเพียง {days} วัน\n"
-               "รีเฟรช CALENDAR ใน events.py จาก federalreserve.gov / bls.gov"),
+        "en": ("⚠️ <b>Calendar needs updating</b> — {types}: only {days}d of dates left.\n"
+               "Add the next dates to CALENDAR in events.py from "
+               "federalreserve.gov / bls.gov / bea.gov."),
+        "my": ("⚠️ <b>Calendar update လိုအပ်သည်</b> — {types}: {days} ရက်စာသာ ကျန်တော့သည်။\n"
+               "events.py ထဲရှိ CALENDAR ကို federalreserve.gov / bls.gov / bea.gov "
+               "မှ နောက်ရက်စွဲများ ဖြည့်ပါ။"),
+        "th": ("⚠️ <b>ต้องอัปเดตปฏิทิน</b> — {types}: เหลือวันที่อีกเพียง {days} วัน\n"
+               "เพิ่มวันถัดไปใน CALENDAR ใน events.py จาก "
+               "federalreserve.gov / bls.gov / bea.gov"),
     },
     "events.countdown_h": {"en": "{h}h {m}m", "my": "{h}h {m}m", "th": "{h} ชม. {m} น."},
     "events.countdown_d": {"en": "{d}d {h}h", "my": "{d}d {h}h", "th": "{d} วัน {h} ชม."},
