@@ -101,9 +101,9 @@ def test_ml_available_is_true_here():
 
 # ── A missing install is announced, not swallowed ───────────────
 
-def _training_run(monkeypatch, store_files, watchdog=None):
-    """Drive main() at 03:00 BKK with enough history to want training."""
-    now = BKK.localize(_dt.datetime(2026, 6, 18, 3, 0))
+def _training_run(monkeypatch, store_files, watchdog=None, at=None):
+    """Drive main() at 03:00 BKK (or `at`) with enough history to train."""
+    now = at or BKK.localize(_dt.datetime(2026, 6, 18, 3, 0))
 
     class _FakeDateTime(_dt.datetime):
         @classmethod

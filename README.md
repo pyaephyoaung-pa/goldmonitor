@@ -171,6 +171,45 @@ git push
 
 GitHub → **Actions** → **Gold Price Monitor** → **Run workflow**
 
+### Step 6 — Reliable schedule (external trigger)
+
+GitHub runs the `*/5` schedule on a best-effort basis: in Sep–Oct 2026 it delivered
+4–8 runs a day, up to 9 hours apart, so price alerts arrived hours late. A run started
+with **workflow_dispatch** starts within seconds, so let an external cron service send
+that request every 5 minutes. The built-in schedule stays as a backstop, and the bot
+warns the owner ("⏱ No completed check for …") when runs fall more than 90 minutes apart.
+
+1. **Create a token that can only start this repo's workflows** —
+   https://github.com/settings/personal-access-tokens/new (*fine-grained token*)
+   - Repository access: **Only select repositories** → `goldmonitor`
+   - Permissions → Repository → **Actions: Read and write** (nothing else)
+   - Expiration: up to a year — set a calendar reminder. When it expires the trigger
+     stops, and the warning above is how you will hear about it.
+2. **Check the token works** — expect `HTTP 204`, and a new *workflow_dispatch* run
+   under Actions:
+
+```bash
+read -rs TOKEN   # paste the token, then Enter
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" \
+  https://api.github.com/repos/<owner>/goldmonitor/actions/workflows/gold_monitor.yml/dispatches \
+  -d '{"ref":"main"}'
+```
+
+3. **Create the cron job**, e.g. on https://cron-job.org (free):
+   - URL: `https://api.github.com/repos/<owner>/goldmonitor/actions/workflows/gold_monitor.yml/dispatches`
+   - Schedule: every 5 minutes
+   - Advanced → request method **POST**; headers `Authorization: Bearer <TOKEN>`,
+     `Accept: application/vnd.github+json`, `Content-Type: application/json`;
+     body `{"ref":"main"}`
+   - Working when the job's history shows `204` responses.
+
+> The token can start, re-run, cancel and delete this repo's workflow runs. It cannot
+> read secrets or change code. If it leaks, delete it on the same settings page and
+> create a new one.
+
 ---
 
 ## 🔮 Prediction: How It Works
@@ -701,6 +740,46 @@ git push
 ```
 
 GitHub → **Actions** → **Gold Price Monitor** → **Run workflow**
+
+### Step 6 — Schedule ကို အချိန်မှန်အောင် လုပ်ပါ (external trigger)
+
+GitHub က `*/5` schedule ကို အချိန်မှန် run ပေးမယ်လို့ အာမခံမထားပါ။ Sep–Oct 2026 မှာ
+တစ်ရက် 4–8 ကြိမ်သာ run ခဲ့ပြီး 9 နာရီအထိ ခြားခဲ့လို့ price alerts တွေ နာရီပေါင်းများစွာ
+နောက်ကျခဲ့ပါတယ်။ **workflow_dispatch** နဲ့ စတဲ့ run က စက္ကန့်ပိုင်းအတွင်း စပါတယ်။ ဒါကြောင့်
+ပြင်ပ cron service တစ်ခုကနေ ၅ မိနစ်တစ်ခါ request ပို့ခိုင်းပါ။ မူလ schedule က backstop
+အဖြစ် ဆက်ရှိနေပြီး run တွေ 90 မိနစ်ထက် ပိုခြားရင် bot က owner ကို သတိပေးပါမယ်
+("⏱ … စစ်ဆေးမှု မပြီးဆုံးခဲ့ပါ")။
+
+1. **ဒီ repo ရဲ့ workflow ကိုပဲ စခွင့်ရှိတဲ့ token ဖန်တီးပါ** —
+   https://github.com/settings/personal-access-tokens/new (*fine-grained token*)
+   - Repository access: **Only select repositories** → `goldmonitor`
+   - Permissions → Repository → **Actions: Read and write** (ကျန်တာ ဘာမှ မပေးပါနဲ့)
+   - Expiration: တစ်နှစ်အထိ — calendar မှာ reminder ထားပါ။ Token သက်တမ်းကုန်ရင်
+     trigger ရပ်သွားပြီး အပေါ်က သတိပေးချက်နဲ့ သိရပါမယ်။
+2. **Token အလုပ်လုပ်မလုပ် စစ်ပါ** — `HTTP 204` ထွက်ပြီး Actions မှာ *workflow_dispatch*
+   run အသစ် ပေါ်ရပါမယ်:
+
+```bash
+read -rs TOKEN   # paste the token, then Enter
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" \
+  https://api.github.com/repos/<owner>/goldmonitor/actions/workflows/gold_monitor.yml/dispatches \
+  -d '{"ref":"main"}'
+```
+
+3. **Cron job ဆောက်ပါ** — ဥပမာ https://cron-job.org (အခမဲ့):
+   - URL: `https://api.github.com/repos/<owner>/goldmonitor/actions/workflows/gold_monitor.yml/dispatches`
+   - Schedule: ၅ မိနစ်တစ်ခါ
+   - Advanced → request method **POST**; headers `Authorization: Bearer <TOKEN>`,
+     `Accept: application/vnd.github+json`, `Content-Type: application/json`;
+     body `{"ref":"main"}`
+   - Job history မှာ `204` response တွေ ပေါ်ရင် အလုပ်လုပ်နေပါပြီ။
+
+> ဒီ token က ဒီ repo ရဲ့ workflow run တွေကို စတာ၊ ပြန် run တာ၊ ရပ်တာ၊ ဖျက်တာပဲ
+> လုပ်နိုင်ပါတယ်။ Secrets ဖတ်တာ၊ code ပြင်တာ မလုပ်နိုင်ပါ။ ပေါက်ကြားသွားရင် အဲဒီ settings
+> page မှာ ဖျက်ပြီး အသစ်ဆောက်ပါ။
 
 ---
 

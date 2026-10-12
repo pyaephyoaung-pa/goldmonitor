@@ -10,9 +10,18 @@ on:
     #
     # Repo is PUBLIC → unlimited Actions minutes, so */5 is fine. (If it ever
     # goes private again, widen this to */15–*/30 to stay under the 2,000-min cap.)
-    # NOTE: GitHub may still throttle/delay scheduled runs under load; the wide
-    # morning (6–14) / evening (20–23) windows absorb that.
+    #
+    # In practice this is only a BACKSTOP. GitHub runs scheduled workflows on a
+    # best-effort basis, and over 34 days in Sep–Oct 2026 it delivered 4–8
+    # runs a day — a median of 4 hours apart, up to 9 — not 288. The reliable
+    # trigger is an external cron calling workflow_dispatch every 5 minutes
+    # (README → Step 6); a manual dispatch started within 2 seconds. Keep this
+    # schedule anyway, so the monitor still runs if that trigger ever stops.
+    # The monitor warns the owner when runs fall more than 90 minutes apart.
     - cron: "*/5 * * * *"
+  # Primary trigger — see above. Overlap is impossible: the concurrency group
+  # below queues at most one run, and a newer request replaces a queued one
+  # (shown as "cancelled" in the Actions list; that is expected).
   workflow_dispatch:
 
 permissions:
