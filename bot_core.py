@@ -325,6 +325,82 @@ def warn_owner_if_webhook_broken(bot_state: dict) -> bool:
         return False
 
 
+# ── The bot's other inputs ──────────────────────────────────────
+# Same contract as the webhook check: throttled through `bot_state`, which the
+# caller persists (True = save it), and never raising.
+
+FEED_STUCK_WARN_INTERVAL_H = 12
+CALENDAR_WARN_INTERVAL_H = 7 * 24
+
+
+def _warned_within(stamp, now: datetime, hours: float) -> bool:
+    """True if `stamp` is less than `hours` old. An unreadable stamp counts as
+    never warned — muting a warning forever is the worse failure."""
+    if not stamp:
+        return False
+    try:
+        age_h = (now - datetime.fromisoformat(stamp)).total_seconds() / 3600
+    except (ValueError, TypeError):
+        return False
+    return 0 <= age_h < hours
+
+
+def warn_owner_if_feed_stuck(bot_state: dict, history: list, usd_oz, now: datetime) -> bool:
+    """Tell the owner when spot has not moved through hours of trading."""
+    if not (TG_BOT_TOKEN and TG_CHAT_ID) or usd_oz is None:
+        return False
+    try:
+        hours = goldapi.hours_frozen(history, usd_oz, now)
+        if hours < goldapi.STUCK_AFTER_OPEN_HOURS:
+            # Moving again: re-arm, so the next freeze is reported at once.
+            return bool(bot_state.pop("feed_stuck_warned_at", None))
+        if _warned_within(bot_state.get("feed_stuck_warned_at"), now,
+                          FEED_STUCK_WARN_INTERVAL_H):
+            return False
+        lang = storage.get_user_lang(TG_CHAT_ID)
+        send_message(i18n.t("monitor.feed_stuck", lang, hours=int(hours),
+                            price=fmt_usd(usd_oz)), TG_CHAT_ID)
+        print(f"[bot] SPOT FROZEN at {usd_oz} for {hours:.1f} trading hours")
+        bot_state["feed_stuck_warned_at"] = now.isoformat()
+        return True
+    except Exception as e:
+        print(f"[bot] feed check failed: {e}")
+        return False
+
+
+def stale_calendar_text(status: dict, lang: str) -> str:
+    """The owner's "calendar needs updating" line, naming what runs out."""
+    short = status.get("short") or list(events.EVENT_TYPES)
+    names = ", ".join(i18n.t(events.EVENT_TYPES[t]["key"], lang)
+                      for t in short if t in events.EVENT_TYPES)
+    return i18n.t("events.stale", lang, types=names,
+                  days=status.get("days_left", 0))
+
+
+def warn_owner_if_calendar_stale(bot_state: dict, now: datetime) -> bool:
+    """Tell the owner, once a week, when a release type is about to run out.
+
+    /events already said so, but only to an owner who happened to run it — and
+    nothing else would notice until CPI or PCE quietly stopped appearing.
+    """
+    if not (TG_BOT_TOKEN and TG_CHAT_ID):
+        return False
+    try:
+        status = events.calendar_status(now)
+        if not status["stale"]:
+            return bool(bot_state.pop("calendar_warned_at", None))
+        if _warned_within(bot_state.get("calendar_warned_at"), now,
+                          CALENDAR_WARN_INTERVAL_H):
+            return False
+        lang = storage.get_user_lang(TG_CHAT_ID)
+        send_message(stale_calendar_text(status, lang), TG_CHAT_ID)
+        bot_state["calendar_warned_at"] = now.isoformat()
+        return True
+    except Exception as e:
+        print(f"[bot] calendar check failed: {e}")
+        return False
+
+
 # ── User-supplied numbers ───────────────────────────────────────
 
 def parse_amount(raw) -> float | None:
@@ -619,7 +695,7 @@ def cmd_events(chat_id: str, lang: str):
     status = events.calendar_status(now)
     if status["stale"] and TG_CHAT_ID and chat_id == TG_CHAT_ID:
         lines.append("")
-        lines.append(i18n.t("events.stale", lang, days=status["days_left"]))
+        lines.append(stale_calendar_text(status, lang))
 
     send_message("\n".join(lines), chat_id)
 
