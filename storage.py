@@ -348,8 +348,14 @@ def load_day_state() -> dict:
     state = _read_file(DAY_STATE_FILE)
     if isinstance(state, dict) and state.get("date") == today:
         return state
-    prev_close = state.get("last_price") if isinstance(state, dict) else None
+    old = state if isinstance(state, dict) else {}
+    prev_close = old.get("last_price")
     return {
+        # When the previous run finished, and when the owner was last told runs
+        # were lagging — gold_monitor.warn_owner_if_runs_lag. Not per-day facts,
+        # so they cross midnight.
+        "last_run_at": old.get("last_run_at"),
+        "run_gap_warned_at": old.get("run_gap_warned_at"),
         "date": today,
         "open_price": None,
         "day_low": None,

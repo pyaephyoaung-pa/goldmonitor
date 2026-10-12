@@ -1102,6 +1102,19 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn.settings": {"en": "⚙️ Settings", "my": "⚙️ Settings", "th": "⚙️ ตั้งค่า"},
 
     # ── Monitor broadcasts ──────────────────────────────────────
+    "monitor.run_gap": {
+        "en": ("⏱ <b>No completed check for {gap}</b>\n"
+               "Price alerts could have arrived that late. If this keeps "
+               "happening, GitHub's schedule is lagging — see README → "
+               "Step 6 (reliable schedule)."),
+        "my": ("⏱ <b>{gap} ကြာအောင် စစ်ဆေးမှု မပြီးဆုံးခဲ့ပါ</b>\n"
+               "Price alerts များ ဤမျှ နောက်ကျနိုင်ခဲ့သည်။ ထပ်ခါထပ်ခါ ဖြစ်နေပါက "
+               "GitHub schedule နောက်ကျနေခြင်း ဖြစ်သည် — README → "
+               "Step 6 (reliable schedule) ကို ကြည့်ပါ။"),
+        "th": ("⏱ <b>ไม่มีการตรวจที่เสร็จสมบูรณ์มา {gap}</b>\n"
+               "การแจ้งเตือนราคาอาจล่าช้าได้เท่านี้ ถ้าเกิดซ้ำ แปลว่าตารางเวลา"
+               "ของ GitHub ล่าช้า — ดู README → Step 6 (reliable schedule)"),
+    },
     "monitor.api_error": {
         "en": "⚠️ <b>PPA Monitor</b>\nAPI error — could not fetch the price",
         "my": "⚠️ <b>PPA Monitor</b>\nAPI error — ဈေးနှုန်း ယူမရပါ",

@@ -189,6 +189,55 @@ def build_weekly_block(history: list, lang: str | None = None) -> str:
     )
 
 
+# ── Is the schedule keeping up? ─────────────────────────────────
+#
+# The workflow asks GitHub for a run every 5 minutes, but GitHub treats
+# scheduled runs as best effort. Over 34 days in Sep–Oct 2026 it delivered 4–8
+# a day — a median of 4 hours apart, up to 9. Every one succeeded, so nothing
+# looked wrong, yet price alerts landed hours late, the evening summary was
+# skipped on 6 of 33 days and the 3am retrain ran on 9. A run is the only
+# thing in a position to notice, by looking at when the previous one finished.
+#
+# The previous COMPLETED run, so a stretch of price-API failures counts too:
+# those runs check nothing either.
+
+RUN_GAP_WARN_MIN = 90          # this long after the previous run is late
+RUN_GAP_WARN_INTERVAL_H = 12   # tell the owner at most twice a day
+
+
+def warn_owner_if_runs_lag(state: dict, now: datetime) -> None:
+    """Tell the owner when this run came long after the previous one.
+
+    Reads `last_run_at` from the day state and stamps `run_gap_warned_at` in
+    it; the caller saves the state, as it does at the end of every run. Never
+    raises: a check on the schedule must not break the run it is checking.
+    """
+    try:
+        last = state.get("last_run_at")
+        if not (last and TG_CHAT_ID):
+            return
+        gap_min = (now - datetime.fromisoformat(last)).total_seconds() / 60
+        if gap_min < RUN_GAP_WARN_MIN:
+            return
+        warned = state.get("run_gap_warned_at")
+        if warned:
+            try:
+                age_h = (now - datetime.fromisoformat(warned)).total_seconds() / 3600
+                if 0 <= age_h < RUN_GAP_WARN_INTERVAL_H:
+                    return
+            except (ValueError, TypeError):
+                pass  # unparseable stamp: treat as never warned, not as muted
+        lang = storage.get_user_lang(TG_CHAT_ID)
+        bot_core.send_message(
+            i18n.t("monitor.run_gap", lang,
+                   gap=bot_core.format_countdown(gap_min / 60, lang)),
+            TG_CHAT_ID)
+        state["run_gap_warned_at"] = now.isoformat()
+        print(f"  [WARN] {gap_min:.0f} min since the previous completed run")
+    except Exception as e:
+        print(f"[monitor] run-gap check failed: {e}")
+
+
 # ── Main Monitor ────────────────────────────────────────────────
 
 def main():
@@ -242,6 +291,7 @@ def main():
 
     # ── Day State ───────────────────────────────────────────────
     state = storage.load_day_state()
+    warn_owner_if_runs_lag(state, now)
     # Set by the evening block; flushed with the day state in one Gist PATCH.
     pending_model_data = None
 
@@ -546,8 +596,10 @@ def main():
                owner_msg=lambda lang: build_evening(lang, with_portfolio=True))
         state["evening_sent"] = True
 
-    # Remember the latest price so tomorrow can detect an overnight gap.
+    # Remember the latest price so tomorrow can detect an overnight gap, and
+    # when this run happened so the next one can tell if it came late.
     state["last_price"] = thb_gram
+    state["last_run_at"] = now.isoformat()
     if pending_model_data is not None:
         saved = storage.save_day_state_and_model(state, pending_model_data)
     else:
@@ -560,10 +612,18 @@ def main():
         print("  [WARN] day state NOT saved — alert flags may replay next run")
 
     # ── Train ML Model (once per day, after enough data) ────────
-    if hour == 3 and len(history) >= 100:
+    # On the first run at or after 03:00, not only on runs inside the 03:00
+    # hour: GitHub delivered a run in that hour on 9 of 33 days, so the models
+    # and the TA track record went most days without a refresh.
+    if hour >= 3 and len(history) >= 100:
         model_data = storage.load_model_data()
         last_trained = model_data.get("last_trained", "")
         today = now.strftime("%Y-%m-%d")
+        # Any run after 03:00 may now train, so a training that produced
+        # nothing (too little labelled data, one class only) would be redone on
+        # every run for the rest of the day, with the same history and the same
+        # outcome. One attempt a day, stamped whatever it returns.
+        attempted = str(model_data.get("train_attempted_on") or "")[:10] == today
         dirty = False
 
         # How the TA reading has actually played out, graded the way the
@@ -583,7 +643,7 @@ def main():
                 model_data["ta_track"] = track
                 dirty = True
 
-        if not last_trained or last_trained[:10] != today:
+        if (not last_trained or last_trained[:10] != today) and not attempted:
             if not predictor.ml_available():
                 # numpy + scikit-learn live in requirements-ml.txt and are
                 # installed by THIS workflow only. If that install ever drops
@@ -605,6 +665,8 @@ def main():
             else:
                 print("[ML] Training prediction models...")
                 new_model = predictor.train_model(history)
+                model_data["train_attempted_on"] = today
+                dirty = True
                 if new_model:
                     # MERGE, never replace: train_model returns only the model
                     # payload, so assigning it wholesale would drop the
