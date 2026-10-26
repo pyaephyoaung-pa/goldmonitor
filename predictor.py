@@ -1081,16 +1081,20 @@ def predict(history: list, model_data: dict, lang: str | None = None) -> dict:
         if not edged:
             # Honesty: none of the models show real predictive skill. Don't
             # dress up coin-flips as a forecast.
-            result["combined_outlook"] = i18n.t("ta.no_edge", lang)
+            key = "ta.no_edge"
         else:
             up_votes = sum(1 for p in edged if p.get("direction") == "UP")
             total = len(edged)
             if up_votes > total / 2:
-                result["combined_outlook"] = i18n.t("ta.bullish", lang)
+                key = "ta.bullish"
             elif up_votes < total / 2:
-                result["combined_outlook"] = i18n.t("ta.bearish", lang)
+                key = "ta.bearish"
             else:
-                result["combined_outlook"] = i18n.t("ta.mixed", lang)
+                key = "ta.mixed"
+        # The key too, so a caller rendering several languages from one
+        # prediction (the evening summary) can render it in each.
+        result["combined_outlook_key"] = key
+        result["combined_outlook"] = i18n.t(key, lang)
 
     return result
 
@@ -1266,12 +1270,30 @@ def get_trend_summary(history: list) -> dict:
     return result
 
 
-def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
+# Who sees the ML forecasts. The owner always — they are the diagnostics. Anyone
+# else only once a model has passed the edge test: until then they were noise
+# with a confidence bar on it. Every nightly model failed the test, and so did
+# the same model trained on two years of hourly gold (28x the data the bot
+# keeps), and two pretrained forecasters, Chronos-Bolt and Chronos-2, scored
+# on months they had never seen — none beat always guessing the more common
+# direction.
+
+
+def ml_visible(prediction: dict, show_ml: bool) -> bool:
+    return show_ml or prediction.get("ml_has_edge") is True
+
+
+def format_prediction_message(prediction: dict, lang: str | None = None,
+                              show_ml: bool = False) -> str:
     """Format prediction results into a Telegram-friendly message.
+
+    `show_ml` is for the owner: the ML lines, the live hit-rate and the
+    training note appear for everyone else only while a model has an edge.
 
     Indicator names (RSI, MACD, Bollinger) stay untranslated on purpose — they
     are read as symbols in every locale.
     """
+    show = ml_visible(prediction, show_ml)
     lines = [i18n.t("predict.title", lang), "━━━━━━━━━━━━━━━"]
 
     ta = prediction.get("technical_analysis", {})
@@ -1361,7 +1383,7 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
                             days=track["days"], signal=track["reading"]))
 
     # ML Predictions
-    if prediction.get("predictions"):
+    if show and prediction.get("predictions"):
         lines.append("")
         lines.append(i18n.t("predict.ml_header", lang))
         for horizon, pred in sorted(prediction["predictions"].items()):
@@ -1389,7 +1411,7 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
             lines.append(i18n.t("predict.no_edge_note", lang))
 
     # Live (real-world) hit-rate from the prediction tracker
-    rates = prediction.get("hit_rates") or {}
+    rates = (prediction.get("hit_rates") or {}) if show else {}
     scored = {h: s for h, s in rates.items() if s.get("n")}
     if scored:
         parts = [
@@ -1400,12 +1422,15 @@ def format_prediction_message(prediction: dict, lang: str | None = None) -> str:
 
     # Final Outlook
     lines.append("━━━━━━━━━━━━━━━")
-    if prediction.get("combined_outlook"):
+    if show and prediction.get("combined_outlook"):
         lines.append(f"💡 {prediction['combined_outlook']}")
     if prediction.get("ta_outlook"):
         lines.append(f"📋 {prediction['ta_outlook']}")
 
-    if not prediction.get("ml_available"):
+    if not show and prediction.get("predictions"):
+        # Say why the section is missing rather than leave a silent gap.
+        lines.append(i18n.t("predict.ml_hidden", lang))
+    if show_ml and not prediction.get("ml_available"):
         lines.append(i18n.t("predict.ml_note", lang,
                             note=prediction.get("ml_note", "")))
 
