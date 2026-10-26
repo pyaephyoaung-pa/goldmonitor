@@ -35,7 +35,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/alerts` | 📋 List your price alerts |
 | `/delalert <#>` | 🗑 Delete a price alert |
 | `/history [N]` | 📈 N-day price history (default 7) |
-| `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/macro` | 🌍 DXY / US10Y / VIX + fear score, and a 📍 note when one sits at a 1-year extreme |
 | `/events` | 📅 Upcoming FOMC / CPI / NFP releases |
 | `/news` | 📰 Recent gold headlines (context only) |
 | `/subscribe` | 🔔 Receive morning/evening price alerts |
@@ -63,6 +63,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/portfolio` | 📊 Portfolio P&L |
 | `/setthreshold N` | ⚙️ Change the drop alert % |
 | `/setrisethreshold N` | 📈 Change the rise alert % |
+| `/status` | 🩺 Bot health: last run, hourly history, price feed, models, calendar |
 
 Commands reply **instantly via webhook** (primary); the Actions poller is a fallback that checks every **15 minutes**. `/help` and `/start` show **inline buttons** — tap instead of typing.
 
@@ -75,6 +76,8 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | Morning 6am–2pm (once) | 🌅 Open price + trend + TA reading (1h) |
 | Evening 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 | Sunday evening | 📅 Weekly recap (week change, high/low, best/worst day) |
+| ~2h before FOMC / CPI / NFP / PCE | 📅 One-time heads-up for the release |
+| Spot crosses the owner's average cost | 💼 Owner only — above or below, once per crossing |
 
 > 🔄 Price checks run every **5 minutes, 24/7** — gold trades around the clock
 > on weekdays, so overnight runs are what make the gap-down alert possible.
@@ -605,7 +608,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/alerts` | 📋 သင့် price alerts စာရင်း |
 | `/delalert <#>` | 🗑 Price alert ဖျက်ပါ |
 | `/history [N]` | 📈 N-day ဈေးသမိုင်း (default 7) |
-| `/macro` | 🌍 DXY / US10Y / VIX + fear score |
+| `/macro` | 🌍 DXY / US10Y / VIX + fear score, and a 📍 note when one sits at a 1-year extreme |
 | `/events` | 📅 လာမည့် FOMC / CPI / NFP ကြေညာချက်များ |
 | `/news` | 📰 ရွှေဆိုင်ရာ သတင်းများ (အခြေအနေသိရန်သာ) |
 | `/subscribe` | 🔔 မနက်/ညနေ ဈေးနှုန်း alerts ရယူပါ |
@@ -633,6 +636,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/portfolio` | 📊 Portfolio P&L |
 | `/setthreshold N` | ⚙️ Drop alert % ပြောင်းပါ |
 | `/setrisethreshold N` | 📈 Rise alert % ပြောင်းပါ |
+| `/status` | 🩺 Bot အခြေအနေ: နောက်ဆုံး run၊ hourly history၊ price feed၊ models၊ calendar |
 
 Commands reply **instantly via webhook** (primary); the Actions poller is a fallback that checks every **15 minutes**. `/help` and `/start` show **inline buttons** — tap instead of typing.
 
@@ -645,6 +649,8 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | မနက် 6am–2pm (once) | 🌅 Open ဈေး + trend + TA reading (1h) |
 | ညနေ 8–9pm | 🌙 Summary + trends + portfolio + prediction |
 | တနင်္ဂနွေ ညနေ | 📅 Weekly recap (week change, high/low, best/worst day) |
+| FOMC / CPI / NFP / PCE မထွက်ခင် ~2 နာရီ | 📅 တစ်ကြိမ်တည်း ကြိုတင်သတိပေးချက် |
+| Spot ဈေးက owner ရဲ့ ပျမ်းမျှ ဝယ်ဈေးကို ဖြတ်တဲ့အခါ | 💼 Owner သာ — အပေါ်/အောက် ဖြတ်တိုင်း တစ်ကြိမ် |
 
 > 🔄 Price checks run every **5 minutes, 24/7** — gold trades around the clock
 > on weekdays, so overnight runs are what make the gap-down alert possible.

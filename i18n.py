@@ -93,6 +93,74 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "❓ Unknown command: {cmd}\nType /help for available commands",
         "th": "❓ ไม่รู้จักคำสั่ง: {cmd}\nพิมพ์ /help เพื่อดูคำสั่งทั้งหมด",
     },
+    "status.title": {"en": "🩺 <b>Bot status</b>", "my": "🩺 <b>Bot အခြေအနေ</b>",
+                     "th": "🩺 <b>สถานะบอท</b>"},
+    "status.last_run": {
+        "en": "⏱ Last monitor run: {ago} ago ({when} BKK)",
+        "my": "⏱ နောက်ဆုံး monitor run: {ago} အရင် ({when} BKK)",
+        "th": "⏱ monitor ทำงานล่าสุด: {ago} ที่แล้ว ({when} BKK)",
+    },
+    "status.last_run_none": {
+        "en": "⏱ Last monitor run: not recorded yet",
+        "my": "⏱ နောက်ဆုံး monitor run: မှတ်တမ်း မရှိသေးပါ",
+        "th": "⏱ monitor ทำงานล่าสุด: ยังไม่มีบันทึก",
+    },
+    "status.history": {
+        "en": "📈 History: {n} points · {recent} in the last 24h (expect ~24)",
+        "my": "📈 History: {n} points · နောက်ဆုံး 24h တွင် {recent} ခု (~24 ရှိသင့်)",
+        "th": "📈 ประวัติ: {n} จุด · {recent} จุดใน 24 ชม. ล่าสุด (ควรมี ~24)",
+    },
+    "status.feed_moving": {
+        "en": "💰 Spot {price}/oz — moving",
+        "my": "💰 Spot {price}/oz — လှုပ်ရှားနေသည်",
+        "th": "💰 Spot {price}/oz — ขยับปกติ",
+    },
+    "status.feed_frozen": {
+        "en": "💰 Spot {price}/oz — unchanged for {hours}h of trading ⚠️",
+        "my": "💰 Spot {price}/oz — ဈေးကွက်ဖွင့်ချိန် {hours} နာရီ မပြောင်းပါ ⚠️",
+        "th": "💰 Spot {price}/oz — ไม่ขยับมา {hours} ชม. ของเวลาซื้อขาย ⚠️",
+    },
+    "status.ml": {
+        "en": "🤖 ML trained {when} · edge: {edges}",
+        "my": "🤖 ML train ခဲ့ချိန် {when} · edge: {edges}",
+        "th": "🤖 ML เทรนล่าสุด {when} · edge: {edges}",
+    },
+    "status.ml_none": {
+        "en": "🤖 ML: not trained yet",
+        "my": "🤖 ML: train မလုပ်ရသေးပါ",
+        "th": "🤖 ML: ยังไม่ได้เทรน",
+    },
+    "status.hit_rate": {
+        "en": "🎯 Live hit-rate: {parts}",
+        "my": "🎯 Live hit-rate: {parts}",
+        "th": "🎯 ความแม่นยำจริง: {parts}",
+    },
+    "status.calendar": {
+        "en": "📅 Calendar left: {runway}{flag}",
+        "my": "📅 Calendar ကျန်ရက်: {runway}{flag}",
+        "th": "📅 ปฏิทินเหลือ: {runway}{flag}",
+    },
+    "status.warnings": {
+        "en": "🔔 Last warnings (BKK): {parts}",
+        "my": "🔔 နောက်ဆုံး သတိပေးချက်များ (BKK): {parts}",
+        "th": "🔔 คำเตือนล่าสุด (BKK): {parts}",
+    },
+    "portfolio.cost_above": {
+        "en": ("💼 <b>Gold crossed above your average cost</b>\n"
+               "{price}/g vs your average {avg}/g — your holding is now in profit"),
+        "my": ("💼 <b>ရွှေဈေး သင့်ပျမ်းမျှ ဝယ်ဈေးထက် ပြန်တက်သွားပြီ</b>\n"
+               "{price}/g၊ သင့်ပျမ်းမျှ {avg}/g — လက်ကျန်ရွှေ အမြတ်ထဲ ရောက်နေပြီ"),
+        "th": ("💼 <b>ราคาทองขึ้นเหนือต้นทุนเฉลี่ยของคุณ</b>\n"
+               "{price}/g เทียบต้นทุนเฉลี่ย {avg}/g — ทองที่ถืออยู่กลับมามีกำไร"),
+    },
+    "portfolio.cost_below": {
+        "en": ("💼 <b>Gold crossed below your average cost</b>\n"
+               "{price}/g vs your average {avg}/g — your holding is now at a loss"),
+        "my": ("💼 <b>ရွှေဈေး သင့်ပျမ်းမျှ ဝယ်ဈေးအောက် ကျသွားပြီ</b>\n"
+               "{price}/g၊ သင့်ပျမ်းမျှ {avg}/g — လက်ကျန်ရွှေ အရှုံးထဲ ရောက်နေပြီ"),
+        "th": ("💼 <b>ราคาทองลงต่ำกว่าต้นทุนเฉลี่ยของคุณ</b>\n"
+               "{price}/g เทียบต้นทุนเฉลี่ย {avg}/g — ทองที่ถืออยู่ตอนนี้ขาดทุน"),
+    },
     "err.owner_only": {
         "en": "🔒 This command is for the bot owner only",
         "my": "🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်",
@@ -271,6 +339,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "ℹ️ Gold drivers — context only, not a forecast",
         "my": "ℹ️ Gold drivers — context only, not a forecast",
         "th": "ℹ️ ปัจจัยขับเคลื่อนราคาทอง — เป็นบริบทเท่านั้น ไม่ใช่การพยากรณ์",
+    },
+    "macro.year_high": {
+        "en": "  📍 {name} is at a 1-year high",
+        "my": "  📍 {name} သည် ၁ နှစ်အတွင်း အမြင့်ဆုံး ဖြစ်နေသည်",
+        "th": "  📍 {name} อยู่ที่จุดสูงสุดในรอบ 1 ปี",
+    },
+    "macro.year_low": {
+        "en": "  📍 {name} is at a 1-year low",
+        "my": "  📍 {name} သည် ၁ နှစ်အတွင်း အနိမ့်ဆုံး ဖြစ်နေသည်",
+        "th": "  📍 {name} อยู่ที่จุดต่ำสุดในรอบ 1 ปี",
+    },
+    "macro.above_pct": {
+        "en": "  📍 {name} is higher than on {pct}% of days in the past year",
+        "my": "  📍 {name} သည် လွန်ခဲ့သော ၁ နှစ်၏ ရက်ပေါင်း {pct}% ထက် မြင့်နေသည်",
+        "th": "  📍 {name} สูงกว่า {pct}% ของวันในรอบปีที่ผ่านมา",
+    },
+    "macro.below_pct": {
+        "en": "  📍 {name} is lower than on {pct}% of days in the past year",
+        "my": "  📍 {name} သည် လွန်ခဲ့သော ၁ နှစ်၏ ရက်ပေါင်း {pct}% ထက် နိမ့်နေသည်",
+        "th": "  📍 {name} ต่ำกว่า {pct}% ของวันในรอบปีที่ผ่านมา",
     },
     "macro.title": {
         "en": "🌍 <b>Macro &amp; Fear</b>",
@@ -836,6 +924,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — edit an entry\n"
                "🗑 /delete &lt;#&gt; — delete an entry\n"
                "📊 /portfolio — portfolio P&amp;L\n"
+               "🩺 /status — bot health (owner)\n"
                "📈 /history [N] — N-day price history\n"
                "⚙️ /setthreshold N — change drop alert %\n"
                "📈 /setrisethreshold N — change rise alert %\n"
@@ -861,6 +950,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
                "🗑 /delete &lt;#&gt; — entry ဖျက်ပါ\n"
                "📊 /portfolio — Portfolio P&amp;L\n"
+               "🩺 /status — bot အခြေအနေ (owner)\n"
                "📈 /history [N] — N-day ဈေးသမိုင်း\n"
                "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
                "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
@@ -886,6 +976,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — แก้ไขรายการ\n"
                "🗑 /delete &lt;#&gt; — ลบรายการ\n"
                "📊 /portfolio — กำไร/ขาดทุนพอร์ต\n"
+               "🩺 /status — สถานะบอท (เจ้าของ)\n"
                "📈 /history [N] — ประวัติราคา N วัน\n"
                "⚙️ /setthreshold N — เปลี่ยน % แจ้งเตือนราคาลง\n"
                "📈 /setrisethreshold N — เปลี่ยน % แจ้งเตือนราคาขึ้น\n"
@@ -1082,6 +1173,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "events.countdown_h": {"en": "{h}h {m}m", "my": "{h}h {m}m", "th": "{h} ชม. {m} น."},
     "events.countdown_d": {"en": "{d}d {h}h", "my": "{d}d {h}h", "th": "{d} วัน {h} ชม."},
 
+    "events.headsup": {
+        "en": ("{emoji} <b>Coming up: {name}</b>{est}\n"
+               "⏰ {when} BKK — in {countdown}\n"
+               "Gold often moves sharply around this release — timing only, not a forecast"),
+        "my": ("{emoji} <b>မကြာမီ: {name}</b>{est}\n"
+               "⏰ {when} BKK — နောက် {countdown}\n"
+               "ဤကြေညာချက်အချိန်တွင် ရွှေဈေး ပြင်းထန်စွာ လှုပ်ရှားတတ်သည် — အချိန်သာ၊ ခန့်မှန်းချက် မဟုတ်ပါ"),
+        "th": ("{emoji} <b>ใกล้ถึงแล้ว: {name}</b>{est}\n"
+               "⏰ {when} น. (BKK) — อีก {countdown}\n"
+               "ราคาทองมักผันผวนแรงช่วงประกาศนี้ — บอกเวลาเท่านั้น ไม่ใช่การพยากรณ์"),
+    },
     "events.banner_pre": {
         "en": "\n⚠️ <b>{name} in {countdown}</b> — expect volatility",
         "my": "\n⚠️ <b>{name} — နောက် {countdown}</b> — ဈေးလှုပ်ရှားမှု ကြီးနိုင်သည်",

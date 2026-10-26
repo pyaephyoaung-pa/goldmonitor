@@ -93,7 +93,9 @@ def _fetch_yahoo_closes(symbol: str) -> list:
     try:
         r = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-            params={"interval": "1d", "range": "5d"},
+            # A year, not five days: the level context below needs it, and it
+            # is still one request per metric.
+            params={"interval": "1d", "range": "1y"},
             headers=_HEADERS,
             timeout=10,
         )
@@ -145,12 +147,45 @@ def reset_cache():
     _macro_cache = None
 
 
+# ── Where is each metric against its own past year? ─────────────
+#
+# The block showed only the DAILY change. A yield that rose 0.03pp today reads
+# the same whether it sits at a 3-month low or at its highest level in years —
+# and the level is what weighs on gold: on 2026-09-28 the 10-year was at its
+# highest since 2007 while the bot said nothing about it. So each metric also
+# carries where today's close sits among the past year's closes.
+
+YEAR_CLOSES = 252           # trading days in a year
+MIN_YEAR_CLOSES = 120       # below this the "past year" is too short to rank
+LEVEL_NOTE_PCT = 90         # mention a metric above this share of days (or below 100-x)
+
+
+def year_position(closes: list) -> dict:
+    """Where the latest close sits among the past year's: {} if too little data.
+
+    `above_pct` is the share of the past year's earlier closes that were
+    strictly lower; `below_pct` the share strictly higher. A new 1-year high or
+    low is flagged on its own, since 100% reads oddly next to it.
+    """
+    past = closes[-YEAR_CLOSES - 1:-1]
+    if len(past) < MIN_YEAR_CLOSES:
+        return {}
+    latest = closes[-1]
+    return {
+        "above_pct": round(sum(c < latest for c in past) / len(past) * 100),
+        "below_pct": round(sum(c > latest for c in past) / len(past) * 100),
+        "year_high": latest > max(past),
+        "year_low": latest < min(past),
+    }
+
+
 def fetch_macro() -> dict:
     """Fetch latest value + daily change for each macro metric.
 
-    Returns {key: {"value", "change_pct", "change_abs", "symbol"}} for whatever
-    succeeded (missing/failed metrics are simply absent). `change_abs` is the
-    raw daily delta — used to show yields in percentage points (pp).
+    Returns {key: {"value", "change_pct", "change_abs", "symbol", ...}} for
+    whatever succeeded (missing/failed metrics are simply absent).
+    `change_abs` is the raw daily delta — used to show yields in percentage
+    points (pp). With a year of closes, year_position()'s keys are added.
     """
     global _macro_cache
     if _macro_cache is not None:
@@ -171,6 +206,7 @@ def fetch_macro() -> dict:
             "change_pct": change_pct,
             "change_abs": change_abs,
             "symbol": sym,
+            **year_position(closes),
         }
     if out:
         _macro_cache = out
@@ -268,6 +304,11 @@ def format_macro_block(macro: dict | None = None, lang: str | None = None) -> st
     if "vix" in macro:
         lines.append(_line("😱", "VIX", macro["vix"]))
 
+    for key, name in (("dxy", "DXY"), ("us10y", "US10Y"), ("vix", "VIX")):
+        note = level_note(macro.get(key) or {}, name, lang)
+        if note:
+            lines.append(note)
+
     score = fear_score(macro)
     if score is not None:
         lines.append(i18n.t("macro.fear", lang, score=score,
@@ -279,6 +320,19 @@ def format_macro_block(macro: dict | None = None, lang: str | None = None) -> st
 
     # Only return a block if we have more than just the header.
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def level_note(metric: dict, name: str, lang: str | None = None) -> str:
+    """"📍 US10Y is at a 1-year high" — only when the level is notable."""
+    if metric.get("year_high"):
+        return i18n.t("macro.year_high", lang, name=name)
+    if metric.get("year_low"):
+        return i18n.t("macro.year_low", lang, name=name)
+    if (metric.get("above_pct") or 0) >= LEVEL_NOTE_PCT:
+        return i18n.t("macro.above_pct", lang, name=name, pct=metric["above_pct"])
+    if (metric.get("below_pct") or 0) >= LEVEL_NOTE_PCT:
+        return i18n.t("macro.below_pct", lang, name=name, pct=metric["below_pct"])
+    return ""
 
 
 def diagnose():
