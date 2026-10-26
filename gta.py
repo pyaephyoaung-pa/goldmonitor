@@ -8,7 +8,13 @@ with a ฿200 spread; jewelry sells at a markup the computed figure cannot show.
 
 Source: the JSON endpoint goldtraders.or.th's own homepage loads. Its
 robots.txt allows general clients ("User-agent: *  Allow: /"); it is called at
-most once per run or command, and a failure only leaves the line out.
+most once per command, and a failure only leaves the line out.
+
+Only /price uses it. From GitHub Actions the site answers 403 (first seen on
+2026-10-26's 20:00 BKK run) while the Vercel webhook is served, so the
+monitor's morning and evening messages do not ask: a request known to be
+refused is load on someone else's server for nothing. Do not route around
+the block — it is the site's to set.
 """
 
 from __future__ import annotations
