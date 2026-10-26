@@ -267,6 +267,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "🤖 ML Predictions:",
         "th": "🤖 การพยากรณ์ ML:",
     },
+    "predict.ml_hidden": {
+        "en": "ℹ️ ML forecasts are hidden until a model beats a coin-flip on data it has not seen",
+        "my": "ℹ️ မမြင်ဖူးသော data ပေါ်တွင် coin-flip ထက် သာသည့် model မရှိမချင်း ML ခန့်မှန်းချက်များကို မပြပါ",
+        "th": "ℹ️ ซ่อนการพยากรณ์ ML ไว้จนกว่าจะมีโมเดลที่ทำได้ดีกว่าการเดาสุ่มบนข้อมูลที่ไม่เคยเห็น",
+    },
     "predict.no_edge_note": {
         "en": "  ⚠️ No model beats a coin-flip out-of-sample — ML is noise here.",
         "my": "  ⚠️ No model beats a coin-flip out-of-sample — ML is noise here.",

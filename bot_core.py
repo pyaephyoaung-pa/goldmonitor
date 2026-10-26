@@ -489,7 +489,8 @@ def cmd_predict(chat_id: str, lang: str):
         storage.save_model_data(model_data)
     prediction = predictor.predict(history, model_data, lang)
     prediction["hit_rates"] = predictor.prediction_hit_rates(model_data)
-    msg = predictor.format_prediction_message(prediction, lang)
+    is_owner = bool(TG_CHAT_ID) and str(chat_id) == str(TG_CHAT_ID)
+    msg = predictor.format_prediction_message(prediction, lang, show_ml=is_owner)
     send_message(msg, chat_id)
 
 

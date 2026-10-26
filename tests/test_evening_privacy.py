@@ -17,7 +17,8 @@ BKK = pytz.timezone("Asia/Bangkok")
 PORTFOLIO_MARK = "Portfolio:"          # the heading of the monitor.portfolio block
 
 
-def _evening(monkeypatch, *, owner="owner", subscribers=("alice", "bob"), langs=None):
+def _evening(monkeypatch, *, owner="owner", subscribers=("alice", "bob"), langs=None,
+             extra_files=None):
     """Run the monitor at 20:00 BKK and return {chat_id: message}."""
     at = BKK.localize(_dt.datetime(2026, 9, 25, 20, 0))
 
@@ -35,6 +36,7 @@ def _evening(monkeypatch, *, owner="owner", subscribers=("alice", "bob"), langs=
                                 "amount_thb": 45000, "price_per_gram": 4500.0,
                                 "grams": 10.0}],
     }
+    files.update(extra_files or {})
     monkeypatch.setattr(storage, "_read_file", lambda f, fresh=False: files.get(
         f, [] if f in (storage.PRICE_HISTORY_FILE, storage.BUY_LOG_FILE) else {}))
     monkeypatch.setattr(storage, "_write_file", lambda f, d: files.__setitem__(f, d) or True)

@@ -626,17 +626,22 @@ def main():
             if changed:
                 # Flushed together with the day state at the end of the run.
                 pending_model_data = model_data
-            evening_outlook = pred.get("combined_outlook") or pred.get("ta_outlook", "")
+            # The ML outlook as a key, rendered in each recipient's language.
+            # The TA reading no longer stands in for it when there are no
+            # models: it describes the last day, and "Tomorrow:" in front of
+            # it presented it as a forecast.
+            outlook_key = pred.get("combined_outlook_key")
+            ml_edge = pred.get("ml_has_edge") is True
             rates = predictor.prediction_hit_rates(model_data)
             scored = {h: sc for h, sc in rates.items() if sc.get("n")}
             hit_parts = [f"{h} {sc['hit_pct']}%" for h, sc in sorted(scored.items())]
         else:
-            evening_outlook, hit_parts = "", []
+            outlook_key, ml_edge, hit_parts = None, False, []
 
         # Fetch macro ONCE, then render it in each recipient language.
         macro_data = signals.fetch_macro()
 
-        def build_evening(lang, with_portfolio=False):
+        def build_evening(lang, owner=False):
             extras = ""
             if evening_trend_parts:
                 extras += i18n.t("monitor.trends", lang,
@@ -648,16 +653,21 @@ def main():
             # The OWNER's holdings and P&L. /portfolio is owner-only, and this
             # block used to go to every subscriber — anyone who typed /subscribe
             # got the owner's grams and profit every evening.
-            if with_portfolio and pnl["num_buys"] > 0:
+            if owner and pnl["num_buys"] > 0:
                 extras += i18n.t(
                     "monitor.portfolio", lang, grams=pnl["total_grams"],
                     buys=pnl["num_buys"],
                     emoji="🟢" if pnl["pnl_thb"] >= 0 else "🔴",
                     pnl=fmt(pnl["pnl_thb"]), pct=pnl["pnl_pct"])
-            if evening_outlook:
-                extras += i18n.t("monitor.outlook", lang, outlook=evening_outlook)
-            if hit_parts:
-                extras += i18n.t("monitor.hit_rate", lang, parts=" | ".join(hit_parts))
+            # The ML outlook and its live hit-rate: always for the owner, for
+            # everyone else only while a model has an edge (predictor.ml_visible).
+            if owner or ml_edge:
+                if outlook_key:
+                    extras += i18n.t("monitor.outlook", lang,
+                                     outlook=i18n.t(outlook_key, lang))
+                if hit_parts:
+                    extras += i18n.t("monitor.hit_rate", lang,
+                                     parts=" | ".join(hit_parts))
             # Weekly recap — Sundays only
             if now.weekday() == 6:
                 extras += build_weekly_block(history, lang)
@@ -675,7 +685,7 @@ def main():
             )
 
         notify(build_evening, "evening",
-               owner_msg=lambda lang: build_evening(lang, with_portfolio=True))
+               owner_msg=lambda lang: build_evening(lang, owner=True))
         state["evening_sent"] = True
 
     # Remember the latest price so tomorrow can detect an overnight gap, and
