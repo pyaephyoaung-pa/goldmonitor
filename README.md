@@ -115,6 +115,11 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | 4 | ≥ 4× (2.0%) | 🟣🟣 Gold price up steeply |
 | 5 | ≥ 5× (2.5%) | 🚀 Gold price surging |
 
+> 💼 The DCA line under each drop / rise / gap alert ("Open your gold app and buy!",
+> "Consider taking profit!", "Log it with /bought") goes to the **owner only**. Replayed
+> over two years of hourly gold, the price did no better after any of these alerts than
+> after an ordinary hour, so subscribers get the facts without the advice.
+
 > 📢 Alerts go to the owner and to every user who ran `/subscribe`
 > 🔄 An alert only repeats after the price recovers past the reset band | auto-reset every new day
 
@@ -690,6 +695,11 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | 3 | ≥ 3× (1.5%) | 🟣 ကြီးစွာ တက် |
 | 4 | ≥ 4× (2.0%) | 🟣🟣 ပြင်းထန်စွာ တက် |
 | 5 | ≥ 5× (2.5%) | 🚀 အကြီးအကျယ် တက် |
+
+> 💼 Drop / rise / gap alert အောက်က DCA စာကြောင်း ("app ဖွင့်ဝယ်ပါ!"၊ "Profit ယူရန် စဉ်းစားပါ!"၊
+> "/bought ဖြင့် မှတ်ပါ") ကို **owner တစ်ယောက်တည်း** ရပါတယ်။ ၂ နှစ်စာ နာရီအလိုက် ရွှေဈေးနဲ့
+> ပြန်စစ်ကြည့်တော့ ဒီ alert တွေ ထွက်ပြီးနောက် ဈေးက ပုံမှန်အချိန်ထက် မသာလို့ subscriber တွေက
+> အချက်အလက်ကိုပဲ ရပါတယ်။
 
 > 📢 Alerts များကို owner နှင့် `/subscribe` လုပ်ထားသော users အားလုံးကို ပို့ပါသည်
 > 🔄 ဈေးပြန်တက်/ကျပြီး reset ဖြစ်မှ alerts ထပ်ပို့ | နေ့သစ်တိုင်း auto reset
