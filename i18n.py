@@ -214,6 +214,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "  1g: {value}",
         "th": "  1 กรัม: {value}",
     },
+    # The Thai Gold Traders Association's announcement (gta.py). "Shops buy"
+    # is what you get selling to a shop, "sell" what you pay buying from one.
+    "gta.line": {
+        "en": ("🏪 Thai Gold Traders Assoc. #{seq} ({when}) — 96.5%, per baht:\n"
+               "   bar: shops buy {bar_buy} · sell {bar_sell}\n"
+               "   jewelry: shops sell {jewelry_sell}"),
+        "my": ("🏪 ထိုင်း ရွှေကုန်သည်အသင်း ကြိမ် {seq} ({when}) — 96.5%၊ ဘတ်သား:\n"
+               "   ရွှေတုံး: ဆိုင်ဝယ် {bar_buy} · ဆိုင်ရောင်း {bar_sell}\n"
+               "   လက်ဝတ်: ဆိုင်ရောင်း {jewelry_sell}"),
+        "th": ("🏪 สมาคมค้าทองคำ ครั้งที่ {seq} ({when}) — 96.5% ต่อบาท:\n"
+               "   ทองแท่ง: รับซื้อ {bar_buy} · ขายออก {bar_sell}\n"
+               "   ทองรูปพรรณ: ขายออก {jewelry_sell}"),
+    },
     "price.spot": {
         "en": "🌐 USD : {value}/oz",
         "my": "🌐 USD : {value}/oz",
