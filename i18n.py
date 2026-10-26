@@ -1329,10 +1329,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 Open    : {open}/g\n"
                "📉 Drop    : {pct:.2f}% (Level {level})\n"
                "⬇️ Day Low : {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}\n"
-               "📝 Log it with /bought &lt;THB&gt;"),
+               "{ta}{advice}"),
         "my": ("{emoji} <b>{title}!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1341,10 +1338,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 Open    : {open}/g\n"
                "📉 ကျဆင်းမှု : {pct:.2f}% (Level {level})\n"
                "⬇️ ယနေ့ Low: {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}\n"
-               "📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"),
+               "{ta}{advice}"),
         "th": ("{emoji} <b>{title}!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1353,10 +1347,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 เปิด     : {open}/g\n"
                "📉 ลดลง    : {pct:.2f}% (ระดับ {level})\n"
                "⬇️ ต่ำสุดวันนี้: {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}\n"
-               "📝 บันทึกด้วย /bought &lt;THB&gt;"),
+               "{ta}{advice}"),
     },
     "monitor.rise": {
         "en": ("{emoji} <b>{title}!</b>\n"
@@ -1367,9 +1358,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 Open     : {open}/g\n"
                "🚀 Rise     : +{pct:.2f}% (Level {level})\n"
                "⬆️ Day High : {high}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}"),
+               "{ta}{advice}"),
         "my": ("{emoji} <b>{title}!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1378,9 +1367,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 Open    : {open}/g\n"
                "🚀 တက်မှု   : +{pct:.2f}% (Level {level})\n"
                "⬆️ ယနေ့ High: {high}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}"),
+               "{ta}{advice}"),
         "th": ("{emoji} <b>{title}!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1389,9 +1376,22 @@ STRINGS: dict[str, dict[str, str]] = {
                "📈 เปิด      : {open}/g\n"
                "🚀 เพิ่มขึ้น  : +{pct:.2f}% (ระดับ {level})\n"
                "⬆️ สูงสุดวันนี้: {high}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "{advice}"),
+               "{ta}{advice}"),
+    },
+    # The owner's DCA prompts under a drop / rise / gap alert. Only the owner
+    # gets them: replayed over two years of hourly gold, the price did no
+    # better after any of these alerts than after an ordinary hour, so for
+    # subscribers they were buy and sell calls with nothing behind them — and
+    # /bought, which the footer pointed to, is an owner command.
+    "alert.log_buy": {
+        "en": "📝 Log it with /bought &lt;THB&gt;",
+        "my": "📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ",
+        "th": "📝 บันทึกด้วย /bought &lt;THB&gt;",
+    },
+    "gap.advice": {
+        "en": "👉 Overnight dip — check for a DCA opportunity!",
+        "my": "👉 ည/နံနက်ပိုင်း ဈေးကျ — DCA အခွင့်အရေး စစ်ပါ!",
+        "th": "👉 ราคาลงช่วงกลางคืน — พิจารณาโอกาส DCA!",
     },
     "monitor.gap": {
         "en": ("🌃 <b>Overnight Gap Down!</b>\n"
@@ -1402,10 +1402,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📕 Prev close  : {prev_close}/g\n"
                "📉 Drop        : {pct:.2f}% (vs yesterday's close)\n"
                "⬇️ Day Low     : {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "👉 Overnight dip — check for a DCA opportunity!\n"
-               "📝 Log it with /bought &lt;THB&gt;"),
+               "{ta}{advice}"),
         "my": ("🌃 <b>ည/အိပ်ရာထ ဈေးကျ (Gap Down)!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1414,10 +1411,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📕 မနေ့ပိတ် : {prev_close}/g\n"
                "📉 ကျဆင်းမှု : {pct:.2f}% (မနေ့ပိတ်ဈေးနှင့်)\n"
                "⬇️ ယနေ့ Low : {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "👉 ည/နံနက်ပိုင်း ဈေးကျ — DCA အခွင့်အရေး စစ်ပါ!\n"
-               "📝 /bought &lt;THB&gt; ဖြင့် မှတ်ပါ"),
+               "{ta}{advice}"),
         "th": ("🌃 <b>ราคาลงข้ามคืน (Gap Down)!</b>\n"
                "⏰ {when}\n"
                "━━━━━━━━━━━━━━━\n"
@@ -1426,10 +1420,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "📕 ปิดเมื่อวาน : {prev_close}/g\n"
                "📉 ลดลง       : {pct:.2f}% (เทียบราคาปิดเมื่อวาน)\n"
                "⬇️ ต่ำสุดวันนี้ : {low}/g"
-               "{ta}\n"
-               "━━━━━━━━━━━━━━━\n"
-               "👉 ราคาลงช่วงกลางคืน — พิจารณาโอกาส DCA!\n"
-               "📝 บันทึกด้วย /bought &lt;THB&gt;"),
+               "{ta}{advice}"),
     },
     "monitor.evening": {
         "en": ("🌙 <b>Evening Gold Summary</b>\n"

@@ -136,6 +136,22 @@ def notify(msg, category: str = "alerts", owner_msg=None):
 
 # ── Helpers ─────────────────────────────────────────────────────
 
+def owner_advice(lang: str, key: str, log_buy: bool = False) -> str:
+    """The owner's DCA prompt block that closes a drop / rise / gap alert.
+
+    Subscribers get the alert without it. Replayed over two years of hourly
+    gold, the price did no better after any drop alert ("buy!") or rise alert
+    ("take profit!") than after an ordinary hour — level 3 drops were
+    followed by a WORSE week (-0.06% vs +0.49%). Those lines are the owner's
+    own plan, not advice to send to other people; and /bought, which the drop
+    footer pointed to, is an owner command.
+    """
+    block = "\n━━━━━━━━━━━━━━━\n" + i18n.t(key, lang)
+    if log_buy:
+        block += "\n" + i18n.t("alert.log_buy", lang)
+    return block
+
+
 def drop_pct(open_p, cur):
     return ((open_p - cur) / open_p) * 100
 
@@ -618,14 +634,17 @@ def main():
     for level in DROP_LEVELS:
         threshold = DROP_THRESHOLD * level["mult"]
         if d >= threshold and not state.get(level["key"]):
-            notify(lambda lang, lv=level: i18n.t(
-                "monitor.drop", lang, emoji=lv["emoji"],
-                title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
-                price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
-                open=fmt(state["open_price"]), pct=d, level=lv["mult"],
-                low=fmt(state["day_low"]), ta=ta_block(lang),
-                advice=i18n.t(f"{lv['str']}.advice", lang),
-            ))
+            def drop_msg(lang, owner=False, lv=level):
+                return i18n.t(
+                    "monitor.drop", lang, emoji=lv["emoji"],
+                    title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
+                    price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
+                    open=fmt(state["open_price"]), pct=d, level=lv["mult"],
+                    low=fmt(state["day_low"]), ta=ta_block(lang),
+                    advice=owner_advice(lang, f"{lv['str']}.advice", log_buy=True)
+                    if owner else "",
+                )
+            notify(drop_msg, owner_msg=lambda lang, f=drop_msg: f(lang, owner=True))
             state[level["key"]] = True
 
     # Reset drop notifications if price recovers
@@ -643,11 +662,14 @@ def main():
     if prev_close and not state.get("notified_gap"):
         gap = drop_pct(prev_close, thb_gram)  # > 0 means down vs yesterday
         if gap >= GAP_THRESHOLD:
-            notify(lambda lang: i18n.t(
-                "monitor.gap", lang, when=time_str, price=fmt(thb_gram),
-                usd_oz=fmt_usd(usd_oz), prev_close=fmt(prev_close), pct=gap,
-                low=fmt(state["day_low"]), ta=ta_block(lang),
-            ))
+            def gap_msg(lang, owner=False):
+                return i18n.t(
+                    "monitor.gap", lang, when=time_str, price=fmt(thb_gram),
+                    usd_oz=fmt_usd(usd_oz), prev_close=fmt(prev_close), pct=gap,
+                    low=fmt(state["day_low"]), ta=ta_block(lang),
+                    advice=owner_advice(lang, "gap.advice", log_buy=True) if owner else "",
+                )
+            notify(gap_msg, owner_msg=lambda lang: gap_msg(lang, owner=True))
             state["notified_gap"] = True
 
     # ── Rise Alerts (5 levels, equal spacing) ──────────────────
@@ -663,14 +685,16 @@ def main():
     for level in RISE_LEVELS:
         threshold = RISE_THRESHOLD * level["mult"]
         if r >= threshold and not state.get(level["key"]):
-            notify(lambda lang, lv=level: i18n.t(
-                "monitor.rise", lang, emoji=lv["emoji"],
-                title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
-                price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
-                open=fmt(state["open_price"]), pct=r, level=lv["mult"],
-                high=fmt(state["day_high"]), ta=ta_block(lang),
-                advice=i18n.t(f"{lv['str']}.advice", lang),
-            ))
+            def rise_msg(lang, owner=False, lv=level):
+                return i18n.t(
+                    "monitor.rise", lang, emoji=lv["emoji"],
+                    title=i18n.t(f"{lv['str']}.title", lang), when=time_str,
+                    price=fmt(thb_gram), usd_oz=fmt_usd(usd_oz),
+                    open=fmt(state["open_price"]), pct=r, level=lv["mult"],
+                    high=fmt(state["day_high"]), ta=ta_block(lang),
+                    advice=owner_advice(lang, f"{lv['str']}.advice") if owner else "",
+                )
+            notify(rise_msg, owner_msg=lambda lang, f=rise_msg: f(lang, owner=True))
             state[level["key"]] = True
 
     # Reset rise notifications if price drops back
