@@ -28,7 +28,7 @@ GitHub Actions + Python — **$0 to run**.
 
 | Command | Description |
 |---|---|
-| `/price` | 💰 Current gold price + quick TA |
+| `/price` | 💰 Current gold price + quick TA + the Thai Gold Traders Association's announced price |
 | `/predict` | 🔮 4h/12h/24h outlook + live hit-rate |
 | `/chart [N]` | 📊 N-day price chart image (default 7, max 30) |
 | `/alert above\|below <USD/oz>` | 🎯 One-shot alert when spot hits a level (max 5) |
@@ -604,7 +604,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 
 | Command | Description |
 |---|---|
-| `/price` | 💰 လက်ရှိ ရွှေဈေး + quick TA |
+| `/price` | 💰 လက်ရှိ ရွှေဈေး + quick TA + ထိုင်း ရွှေကုန်သည်အသင်း ကြေညာဈေး |
 | `/predict` | 🔮 4h/12h/24h ခန့်မှန်းချက် + live hit-rate |
 | `/chart [N]` | 📊 N-day ဈေး chart ပုံ (default 7, max 30) |
 | `/alert above\|below <USD/oz>` | 🎯 Spot အဆင့်ရောက်ရင် one-shot alert (max 5) |

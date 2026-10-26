@@ -26,6 +26,7 @@ import pytz
 import requests
 
 import events
+import gta
 import i18n
 import news
 import storage
@@ -455,6 +456,12 @@ def cmd_price(chat_id: str, lang: str):
         i18n.t("price.jewelry", lang),
         i18n.t("price.baht_weight", lang, value=fmt(gb["baht_9650"])),
         i18n.t("price.per_gram", lang, value=fmt(gb["gram_9650"])),
+    ]
+    # What Thai shops actually quote, next to the computed figures above.
+    gta_line = gta.format_line(gta.fetch_latest(), lang)
+    if gta_line:
+        lines.append(gta_line)
+    lines += [
         "━━━━━━━━━━━━━━━",
         i18n.t("price.spot", lang, value=fmt_usd(usd_oz)),
         i18n.t("price.rate", lang, value=thb_rate),
@@ -1424,6 +1431,7 @@ def dispatch_update(update: dict) -> bool:
     # the same container would be served from the first one's cached Gist.
     storage.reset_cache()
     signals.reset_cache()
+    gta.reset_cache()
 
     # Inline keyboard button press — ack the spinner, then re-dispatch the
     # button's callback_data exactly as if the user had typed the command.

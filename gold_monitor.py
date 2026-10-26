@@ -22,6 +22,7 @@ from datetime import datetime
 import pytz
 
 import events
+import gta
 import i18n
 import news
 import storage
@@ -503,10 +504,14 @@ def main():
 
         # Fetch macro ONCE, then render it in each recipient language.
         macro_data = signals.fetch_macro()
+        gta_price = gta.fetch_latest()
         gb = gold_breakdown(thb_gram)
 
         def build_morning(lang):
             extras = ""
+            gta_line = gta.format_line(gta_price, lang, now)
+            if gta_line:
+                extras += "\n" + gta_line
             if trend_parts:
                 extras += i18n.t("monitor.trend", lang, parts=" | ".join(trend_parts))
             if morning_signal:
@@ -721,9 +726,13 @@ def main():
 
         # Fetch macro ONCE, then render it in each recipient language.
         macro_data = signals.fetch_macro()
+        gta_price = gta.fetch_latest()
 
         def build_evening(lang, owner=False):
             extras = ""
+            gta_line = gta.format_line(gta_price, lang, now)
+            if gta_line:
+                extras += "\n" + gta_line
             if evening_trend_parts:
                 extras += i18n.t("monitor.trends", lang,
                                  parts=" | ".join(evening_trend_parts))
