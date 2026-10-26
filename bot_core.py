@@ -19,7 +19,7 @@ import re
 import time
 import traceback
 import html as html_module
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytz
 import requests
@@ -1172,6 +1172,84 @@ def main_keyboard(lang: str | None = None) -> dict:
     }
 
 
+def _stamp(iso) -> str | None:
+    """"10-26 18:40" in Bangkok time, or None for a missing/unreadable stamp."""
+    try:
+        return datetime.fromisoformat(iso).astimezone(BANGKOK_TZ).strftime("%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return None
+
+
+def _horizon_hours(item) -> int:
+    """Sort key for ("24h", model) pairs: 4h, 12h, 24h — not "12h" < "24h" < "4h"."""
+    digits = item[0].rstrip("h")
+    return int(digits) if digits.isdigit() else 0
+
+
+def cmd_status(chat_id: str, lang: str):
+    """Owner: the bot's own health on one screen.
+
+    Everything the watchdogs check — when the monitor last ran, whether the
+    history is filling hourly, whether spot is moving, how the models did, how
+    much calendar is left — read from the Gist, with no outside calls. Each
+    watchdog only speaks up when something is wrong; this is for "is it all
+    fine right now?".
+    """
+    now = datetime.now(BANGKOK_TZ)
+    lines = [i18n.t("status.title", lang), "━━━━━━━━━━━━━━━"]
+
+    day = storage.load_day_state()
+    last_run = day.get("last_run_at")
+    try:
+        ago_h = (now - datetime.fromisoformat(last_run)).total_seconds() / 3600
+        lines.append(i18n.t("status.last_run", lang, ago=format_countdown(ago_h, lang),
+                            when=_stamp(last_run)))
+    except (TypeError, ValueError):
+        lines.append(i18n.t("status.last_run_none", lang))
+
+    history = storage.get_price_history()
+    times, _ = predictor._timeline(history)
+    recent = sum(1 for t in times if timedelta(0) <= now - t <= timedelta(hours=24))
+    lines.append(i18n.t("status.history", lang, n=len(history), recent=recent))
+
+    latest = next((h for h in reversed(history)
+                   if isinstance(h, dict) and h.get("usd_oz") is not None), None)
+    if latest:
+        frozen = goldapi.hours_frozen(history, latest["usd_oz"], now)
+        key = ("status.feed_frozen" if frozen >= goldapi.STUCK_AFTER_OPEN_HOURS
+               else "status.feed_moving")
+        lines.append(i18n.t(key, lang, price=fmt_usd(latest["usd_oz"]), hours=int(frozen)))
+
+    model_data = storage.load_model_data()
+    models = model_data.get("models") or {}
+    trained = _stamp(model_data.get("last_trained"))
+    if models and trained:
+        edges = " · ".join(f"{h} {'✅' if (m or {}).get('has_edge') else '✗'}"
+                           for h, m in sorted(models.items(), key=_horizon_hours))
+        lines.append(i18n.t("status.ml", lang, when=trained, edges=edges))
+    else:
+        lines.append(i18n.t("status.ml_none", lang))
+    rates = {h: r for h, r in predictor.prediction_hit_rates(model_data).items() if r.get("n")}
+    if rates:
+        lines.append(i18n.t("status.hit_rate", lang, parts=" | ".join(
+            f"{h} {r['hit_pct']}% (n={r['n']})" for h, r in sorted(rates.items()))))
+
+    cal = events.calendar_status(now)
+    runway = " · ".join(f"{t.upper()} {d}d" for t, d in (cal.get("runway") or {}).items())
+    lines.append(i18n.t("status.calendar", lang, runway=runway or "—",
+                        flag=" ⚠️" if cal.get("stale") else ""))
+
+    bot_state = storage.load_bot_state()
+    warned = [(name, _stamp(src.get(key))) for name, src, key in (
+        ("run gap", day, "run_gap_warned_at"), ("feed", bot_state, "feed_stuck_warned_at"),
+        ("calendar", bot_state, "calendar_warned_at"), ("webhook", bot_state, "webhook_warned_at"))]
+    parts = [f"{name} {when}" for name, when in warned if when]
+    if parts:
+        lines.append(i18n.t("status.warnings", lang, parts=" · ".join(parts)))
+
+    send_message("\n".join(lines), chat_id)
+
+
 def cmd_help(chat_id: str, lang: str):
     send_message(i18n.t("help.text", lang), chat_id, reply_markup=main_keyboard(lang))
 
@@ -1211,6 +1289,7 @@ OWNER_COMMANDS = {
     "/portfolio": lambda cid, _, lang: cmd_portfolio(cid, lang),
     "/setthreshold": cmd_setthreshold,
     "/setrisethreshold": cmd_setrisethreshold,
+    "/status": lambda cid, _, lang: cmd_status(cid, lang),
 }
 
 COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}

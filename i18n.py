@@ -93,6 +93,58 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "❓ Unknown command: {cmd}\nType /help for available commands",
         "th": "❓ ไม่รู้จักคำสั่ง: {cmd}\nพิมพ์ /help เพื่อดูคำสั่งทั้งหมด",
     },
+    "status.title": {"en": "🩺 <b>Bot status</b>", "my": "🩺 <b>Bot အခြေအနေ</b>",
+                     "th": "🩺 <b>สถานะบอท</b>"},
+    "status.last_run": {
+        "en": "⏱ Last monitor run: {ago} ago ({when} BKK)",
+        "my": "⏱ နောက်ဆုံး monitor run: {ago} အရင် ({when} BKK)",
+        "th": "⏱ monitor ทำงานล่าสุด: {ago} ที่แล้ว ({when} BKK)",
+    },
+    "status.last_run_none": {
+        "en": "⏱ Last monitor run: not recorded yet",
+        "my": "⏱ နောက်ဆုံး monitor run: မှတ်တမ်း မရှိသေးပါ",
+        "th": "⏱ monitor ทำงานล่าสุด: ยังไม่มีบันทึก",
+    },
+    "status.history": {
+        "en": "📈 History: {n} points · {recent} in the last 24h (expect ~24)",
+        "my": "📈 History: {n} points · နောက်ဆုံး 24h တွင် {recent} ခု (~24 ရှိသင့်)",
+        "th": "📈 ประวัติ: {n} จุด · {recent} จุดใน 24 ชม. ล่าสุด (ควรมี ~24)",
+    },
+    "status.feed_moving": {
+        "en": "💰 Spot {price}/oz — moving",
+        "my": "💰 Spot {price}/oz — လှုပ်ရှားနေသည်",
+        "th": "💰 Spot {price}/oz — ขยับปกติ",
+    },
+    "status.feed_frozen": {
+        "en": "💰 Spot {price}/oz — unchanged for {hours}h of trading ⚠️",
+        "my": "💰 Spot {price}/oz — ဈေးကွက်ဖွင့်ချိန် {hours} နာရီ မပြောင်းပါ ⚠️",
+        "th": "💰 Spot {price}/oz — ไม่ขยับมา {hours} ชม. ของเวลาซื้อขาย ⚠️",
+    },
+    "status.ml": {
+        "en": "🤖 ML trained {when} · edge: {edges}",
+        "my": "🤖 ML train ခဲ့ချိန် {when} · edge: {edges}",
+        "th": "🤖 ML เทรนล่าสุด {when} · edge: {edges}",
+    },
+    "status.ml_none": {
+        "en": "🤖 ML: not trained yet",
+        "my": "🤖 ML: train မလုပ်ရသေးပါ",
+        "th": "🤖 ML: ยังไม่ได้เทรน",
+    },
+    "status.hit_rate": {
+        "en": "🎯 Live hit-rate: {parts}",
+        "my": "🎯 Live hit-rate: {parts}",
+        "th": "🎯 ความแม่นยำจริง: {parts}",
+    },
+    "status.calendar": {
+        "en": "📅 Calendar left: {runway}{flag}",
+        "my": "📅 Calendar ကျန်ရက်: {runway}{flag}",
+        "th": "📅 ปฏิทินเหลือ: {runway}{flag}",
+    },
+    "status.warnings": {
+        "en": "🔔 Last warnings (BKK): {parts}",
+        "my": "🔔 နောက်ဆုံး သတိပေးချက်များ (BKK): {parts}",
+        "th": "🔔 คำเตือนล่าสุด (BKK): {parts}",
+    },
     "err.owner_only": {
         "en": "🔒 This command is for the bot owner only",
         "my": "🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်",
@@ -851,6 +903,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — edit an entry\n"
                "🗑 /delete &lt;#&gt; — delete an entry\n"
                "📊 /portfolio — portfolio P&amp;L\n"
+               "🩺 /status — bot health (owner)\n"
                "📈 /history [N] — N-day price history\n"
                "⚙️ /setthreshold N — change drop alert %\n"
                "📈 /setrisethreshold N — change rise alert %\n"
@@ -876,6 +929,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — entry ပြင်ဆင်ပါ\n"
                "🗑 /delete &lt;#&gt; — entry ဖျက်ပါ\n"
                "📊 /portfolio — Portfolio P&amp;L\n"
+               "🩺 /status — bot အခြေအနေ (owner)\n"
                "📈 /history [N] — N-day ဈေးသမိုင်း\n"
                "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
                "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
@@ -901,6 +955,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "✏️ /edit &lt;#&gt; &lt;THB&gt; — แก้ไขรายการ\n"
                "🗑 /delete &lt;#&gt; — ลบรายการ\n"
                "📊 /portfolio — กำไร/ขาดทุนพอร์ต\n"
+               "🩺 /status — สถานะบอท (เจ้าของ)\n"
                "📈 /history [N] — ประวัติราคา N วัน\n"
                "⚙️ /setthreshold N — เปลี่ยน % แจ้งเตือนราคาลง\n"
                "📈 /setrisethreshold N — เปลี่ยน % แจ้งเตือนราคาขึ้น\n"
