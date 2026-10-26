@@ -238,6 +238,88 @@ def warn_owner_if_runs_lag(state: dict, now: datetime) -> None:
         print(f"[monitor] run-gap check failed: {e}")
 
 
+# ── Heads-up before a scheduled release ─────────────────────────
+#
+# The calendar only reached people as a banner on an alert or a line in the
+# daily messages — so a CPI print at 19:30 BKK went unmentioned unless the
+# price had already moved enough to trigger an alert. Now each release gets
+# one broadcast shortly before it. Announced releases are remembered in
+# _bot_state (not the day state, which resets at midnight and would announce
+# a 00:30 release twice).
+
+EVENT_HEADSUP_HOURS = 2.0
+_ANNOUNCED_KEEP = 20
+
+
+def _event_key(event) -> str:
+    return f"{event.type}@{event.when_utc.isoformat()}"
+
+
+def announce_upcoming_events(now: datetime) -> bool:
+    """Broadcast each release once, within EVENT_HEADSUP_HOURS of it.
+
+    True when _bot_state changed and should be saved.
+    """
+    announced = list(_bot_state.get("events_announced") or [])
+    due = [e for e in events.upcoming(now, within_hours=EVENT_HEADSUP_HOURS)
+           if _event_key(e) not in announced]
+    for event in due:
+        def render(lang, event=event):
+            return i18n.t(
+                "events.headsup", lang, name=i18n.t(event.label_key, lang),
+                emoji=event.emoji,
+                est=i18n.t("events.estimated", lang) if event.estimated else "",
+                when=event.when().strftime("%H:%M"),
+                countdown=bot_core.format_countdown(event.hours_until(now), lang))
+        notify(render, "alerts")
+        announced.append(_event_key(event))
+        print(f"  Event heads-up sent: {event.type} at {event.when_utc:%H:%M} UTC")
+    if not due:
+        return False
+    _bot_state["events_announced"] = announced[-_ANNOUNCED_KEEP:]
+    return True
+
+
+# ── The owner's average cost ────────────────────────────────────
+#
+# /portfolio shows the P&L when asked. What changes the owner's position is
+# the price crossing their average cost, in either direction — so say so when
+# it happens. A band around the cost keeps a price sitting on it from
+# reporting a cross every few minutes, and a new average (after a buy or a
+# sale) re-baselines quietly: the line moved, the price did not cross it.
+
+COST_CROSS_MARGIN = 0.25  # percent either side of the average cost
+
+
+def alert_owner_on_cost_cross(thb_gram: float) -> bool:
+    """Tell the owner when spot crosses their average cost. True = save state."""
+    if not TG_CHAT_ID:
+        return False
+    try:
+        book = storage.get_portfolio()
+        avg = book.get("avg_cost") or 0
+        if book.get("total_grams", 0) <= 0 or avg <= 0:
+            return bool(_bot_state.pop("cost_side", None))
+        band = avg * COST_CROSS_MARGIN / 100
+        side = ("above" if thb_gram >= avg + band
+                else "below" if thb_gram <= avg - band else None)
+        same_basis = _bot_state.get("cost_basis") == round(avg, 2)
+        if side is None or (side == _bot_state.get("cost_side") and same_basis):
+            return False
+        crossed = same_basis and _bot_state.get("cost_side") is not None
+        _bot_state["cost_side"], _bot_state["cost_basis"] = side, round(avg, 2)
+        if crossed:
+            lang = storage.get_user_lang(TG_CHAT_ID)
+            bot_core.send_message(
+                i18n.t(f"portfolio.cost_{side}", lang, price=fmt(thb_gram), avg=fmt(avg)),
+                TG_CHAT_ID)
+            print(f"  Cost cross: spot {side} the average cost {avg}")
+        return True
+    except Exception as e:
+        print(f"[monitor] cost check failed: {e}")
+        return False
+
+
 # ── Main Monitor ────────────────────────────────────────────────
 
 def main():
@@ -680,6 +762,17 @@ def main():
         # One write for everything this block changed.
         if dirty and storage.save_model_data(model_data):
             print("[ML] Model data saved to Gist")
+
+    # ── One-off notices ─────────────────────────────────────────
+    # A heads-up before each release, and the owner's average-cost crossing.
+    # Both remember what they said in _bot_state, so neither repeats.
+    try:
+        headsup = announce_upcoming_events(now)
+        cost = alert_owner_on_cost_cross(thb_gram)
+        if headsup or cost:
+            storage.save_bot_state(_bot_state)
+    except Exception as e:
+        print(f"[monitor] notices failed: {e}")
 
     # ── Input watchdogs (owner only) ────────────────────────────
     # A price source answering with a frozen quote, and an event calendar about

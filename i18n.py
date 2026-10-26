@@ -145,6 +145,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "🔔 နောက်ဆုံး သတိပေးချက်များ (BKK): {parts}",
         "th": "🔔 คำเตือนล่าสุด (BKK): {parts}",
     },
+    "portfolio.cost_above": {
+        "en": ("💼 <b>Gold crossed above your average cost</b>\n"
+               "{price}/g vs your average {avg}/g — your holding is now in profit"),
+        "my": ("💼 <b>ရွှေဈေး သင့်ပျမ်းမျှ ဝယ်ဈေးထက် ပြန်တက်သွားပြီ</b>\n"
+               "{price}/g၊ သင့်ပျမ်းမျှ {avg}/g — လက်ကျန်ရွှေ အမြတ်ထဲ ရောက်နေပြီ"),
+        "th": ("💼 <b>ราคาทองขึ้นเหนือต้นทุนเฉลี่ยของคุณ</b>\n"
+               "{price}/g เทียบต้นทุนเฉลี่ย {avg}/g — ทองที่ถืออยู่กลับมามีกำไร"),
+    },
+    "portfolio.cost_below": {
+        "en": ("💼 <b>Gold crossed below your average cost</b>\n"
+               "{price}/g vs your average {avg}/g — your holding is now at a loss"),
+        "my": ("💼 <b>ရွှေဈေး သင့်ပျမ်းမျှ ဝယ်ဈေးအောက် ကျသွားပြီ</b>\n"
+               "{price}/g၊ သင့်ပျမ်းမျှ {avg}/g — လက်ကျန်ရွှေ အရှုံးထဲ ရောက်နေပြီ"),
+        "th": ("💼 <b>ราคาทองลงต่ำกว่าต้นทุนเฉลี่ยของคุณ</b>\n"
+               "{price}/g เทียบต้นทุนเฉลี่ย {avg}/g — ทองที่ถืออยู่ตอนนี้ขาดทุน"),
+    },
     "err.owner_only": {
         "en": "🔒 This command is for the bot owner only",
         "my": "🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်",
@@ -1152,6 +1168,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "events.countdown_h": {"en": "{h}h {m}m", "my": "{h}h {m}m", "th": "{h} ชม. {m} น."},
     "events.countdown_d": {"en": "{d}d {h}h", "my": "{d}d {h}h", "th": "{d} วัน {h} ชม."},
 
+    "events.headsup": {
+        "en": ("{emoji} <b>Coming up: {name}</b>{est}\n"
+               "⏰ {when} BKK — in {countdown}\n"
+               "Gold often moves sharply around this release — timing only, not a forecast"),
+        "my": ("{emoji} <b>မကြာမီ: {name}</b>{est}\n"
+               "⏰ {when} BKK — နောက် {countdown}\n"
+               "ဤကြေညာချက်အချိန်တွင် ရွှေဈေး ပြင်းထန်စွာ လှုပ်ရှားတတ်သည် — အချိန်သာ၊ ခန့်မှန်းချက် မဟုတ်ပါ"),
+        "th": ("{emoji} <b>ใกล้ถึงแล้ว: {name}</b>{est}\n"
+               "⏰ {when} น. (BKK) — อีก {countdown}\n"
+               "ราคาทองมักผันผวนแรงช่วงประกาศนี้ — บอกเวลาเท่านั้น ไม่ใช่การพยากรณ์"),
+    },
     "events.banner_pre": {
         "en": "\n⚠️ <b>{name} in {countdown}</b> — expect volatility",
         "my": "\n⚠️ <b>{name} — နောက် {countdown}</b> — ဈေးလှုပ်ရှားမှု ကြီးနိုင်သည်",
