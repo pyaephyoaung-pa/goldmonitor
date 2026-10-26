@@ -114,6 +114,22 @@ CALENDAR = [
     ("2026-11-25", "pce"),   # October 2026 data
     ("2026-12-23", "pce"),   # November 2026 data
 
+    # ── PCE 2027 — VERIFIED against bea.gov/news/schedule/next-year on
+    #    2026-10-26, row by row: each row carries its own date and title, so
+    #    the date column above cannot be paired with the wrong release.
+    ("2027-01-28", "pce"),   # December 2026 data
+    ("2027-02-25", "pce"),   # January 2027 data
+    ("2027-03-31", "pce"),   # February 2027 data
+    ("2027-04-29", "pce"),   # March 2027 data
+    ("2027-05-27", "pce"),   # April 2027 data
+    ("2027-06-25", "pce"),   # May 2027 data
+    ("2027-07-29", "pce"),   # June 2027 data
+    ("2027-08-25", "pce"),   # July 2027 data
+    ("2027-09-30", "pce"),   # August 2027 data
+    ("2027-10-28", "pce"),   # September 2027 data
+    ("2027-11-24", "pce"),   # October 2027 data
+    ("2027-12-22", "pce"),   # November 2027 data
+
     # ── CPI 2026 — VERIFIED against bls.gov/schedule/news_release/cpi.htm
     #    on 2026-09-22. 08:30 ET. Dates are RELEASE dates; the reference month
     #    is the month before.
@@ -161,8 +177,6 @@ CALENDAR = [
     ("2027-10-08", "nfp"),   # September 2027 data
     ("2027-11-05", "nfp"),   # October 2027 data
     ("2027-12-03", "nfp"),   # November 2027 data
-    # PCE 2027 is not out yet: bea.gov/news/schedule listed only 2026 on
-    # 2026-10-12. calendar_status() warns before the 2026 PCE dates run out.
 ]
 
 # Some releases follow a published rule rather than an ad-hoc date, so they can

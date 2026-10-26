@@ -93,12 +93,12 @@ def test_a_topped_up_calendar_rearms_the_warning(owner, monkeypatch):
     assert "calendar_warned_at" not in state and owner == []
 
 
-def test_cpi_and_nfp_are_listed_through_2027():
-    """The data, not the mechanism: BLS published 2027 and it went in on
-    2026-10-12. PCE did not — BEA had not published 2027 yet — so the weekly
-    warning will name it from early November until it is added."""
-    runway = events.calendar_status(UTC.localize(datetime(2026, 10, 12)))["runway"]
-    assert runway["cpi"] > 365 and runway["nfp"] > 365
+def test_every_release_type_is_listed_through_2027():
+    """The data, not the mechanism. CPI and NFP for 2027 went in on
+    2026-10-12 from BLS; PCE on 2026-10-26, once BEA published 2027."""
+    status = events.calendar_status(UTC.localize(datetime(2026, 10, 26)))
+    assert not status["stale"]
+    assert all(days > 365 for days in status["runway"].values()), status["runway"]
 
 
 # ── 2. The price source ─────────────────────────────────────────
