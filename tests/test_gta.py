@@ -109,3 +109,12 @@ def test_price_command_without_it_still_works(endpoint, monkeypatch):
     monkeypatch.setattr(bot_core, "send_message", lambda text, chat_id="", **kw: sent.append(text))
     bot_core.cmd_price("someone", "en")
     assert sent and "Gold Traders" not in sent[0] and "$4,019.00" in sent[0]
+
+
+def test_the_monitor_does_not_ask(monkeypatch):
+    """GitHub Actions gets 403 from the site (2026-10-26); only /price asks."""
+    import test_evening_privacy
+    calls = []
+    monkeypatch.setattr(gta, "fetch_latest", lambda: calls.append(1))
+    got = test_evening_privacy._evening(monkeypatch)
+    assert got["owner"] and calls == []
