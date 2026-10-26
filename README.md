@@ -64,6 +64,7 @@ GitHub Actions + Python — **$0 to run**.
 | `/setthreshold N` | ⚙️ Change the drop alert % |
 | `/setrisethreshold N` | 📈 Change the rise alert % |
 | `/status` | 🩺 Bot health: last run, hourly history, price feed, models, calendar |
+| `/backup` | 🗄 Backup file: ledger, subscribers, alerts, settings, price history — restore with `python restore_backup.py FILE --apply` |
 
 Commands reply **instantly via webhook** (primary); the Actions poller is a fallback that checks every **15 minutes**. `/help` and `/start` show **inline buttons** — tap instead of typing.
 
@@ -78,6 +79,8 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | Sunday evening | 📅 Weekly recap (week change, high/low, best/worst day) |
 | ~2h before FOMC / CPI / NFP / PCE | 📅 One-time heads-up for the release |
 | Spot crosses the owner's average cost | 💼 Owner only — above or below, once per crossing |
+| Once a week, 21:00–24:00 BKK | 🗄 Owner only — the `/backup` file |
+| A price source freezes in trading hours | 🔀 Owner only — the bot switches to the other source until it moves |
 
 > 🔄 Price checks run every **5 minutes, 24/7** — gold trades around the clock
 > on weekdays, so overnight runs are what make the gap-down alert possible.
@@ -637,6 +640,7 @@ GitHub Actions + Python — **ကုန်ကျငွေ $0**
 | `/setthreshold N` | ⚙️ Drop alert % ပြောင်းပါ |
 | `/setrisethreshold N` | 📈 Rise alert % ပြောင်းပါ |
 | `/status` | 🩺 Bot အခြေအနေ: နောက်ဆုံး run၊ hourly history၊ price feed၊ models၊ calendar |
+| `/backup` | 🗄 Backup file: မှတ်တမ်း၊ subscribers၊ alerts၊ settings၊ price history — `python restore_backup.py FILE --apply` နဲ့ ပြန်ထည့်ပါ |
 
 Commands reply **instantly via webhook** (primary); the Actions poller is a fallback that checks every **15 minutes**. `/help` and `/start` show **inline buttons** — tap instead of typing.
 
@@ -651,6 +655,8 @@ Commands reply **instantly via webhook** (primary); the Actions poller is a fall
 | တနင်္ဂနွေ ညနေ | 📅 Weekly recap (week change, high/low, best/worst day) |
 | FOMC / CPI / NFP / PCE မထွက်ခင် ~2 နာရီ | 📅 တစ်ကြိမ်တည်း ကြိုတင်သတိပေးချက် |
 | Spot ဈေးက owner ရဲ့ ပျမ်းမျှ ဝယ်ဈေးကို ဖြတ်တဲ့အခါ | 💼 Owner သာ — အပေါ်/အောက် ဖြတ်တိုင်း တစ်ကြိမ် |
+| တစ်ပတ်တစ်ခါ၊ 21:00–24:00 BKK | 🗄 Owner သာ — `/backup` file |
+| ဈေးကွက်ဖွင့်ချိန် price source ရပ်သွားရင် | 🔀 Owner သာ — ပြန်မလှုပ်မချင်း တခြား source ကို ပြောင်းသုံး |
 
 > 🔄 Price checks run every **5 minutes, 24/7** — gold trades around the clock
 > on weekdays, so overnight runs are what make the gap-down alert possible.

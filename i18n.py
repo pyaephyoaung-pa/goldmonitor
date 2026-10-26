@@ -161,6 +161,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "th": ("💼 <b>ราคาทองลงต่ำกว่าต้นทุนเฉลี่ยของคุณ</b>\n"
                "{price}/g เทียบต้นทุนเฉลี่ย {avg}/g — ทองที่ถืออยู่ตอนนี้ขาดทุน"),
     },
+    "backup.caption": {
+        "en": ("🗄 <b>Gold Monitor backup</b> — {date}\n"
+               "{entries} ledger entries · {points} price points · {subscribers} subscribers\n"
+               "Keep this file. Restore with: <code>python restore_backup.py FILE --apply</code>"),
+        "my": ("🗄 <b>Gold Monitor backup</b> — {date}\n"
+               "မှတ်တမ်း {entries} ခု · ဈေးနှုန်း point {points} ခု · subscriber {subscribers} ဦး\n"
+               "ဒီ file ကို သိမ်းထားပါ။ ပြန်ထည့်ရန်: <code>python restore_backup.py FILE --apply</code>"),
+        "th": ("🗄 <b>สำรองข้อมูล Gold Monitor</b> — {date}\n"
+               "รายการ {entries} · ราคา {points} จุด · ผู้ติดตาม {subscribers} คน\n"
+               "เก็บไฟล์นี้ไว้ กู้คืนด้วย: <code>python restore_backup.py FILE --apply</code>"),
+    },
+    "backup.unavailable": {
+        "en": "⚠️ Backup skipped — the Gist could not be read, so it would have been empty",
+        "my": "⚠️ Backup မလုပ်ပါ — Gist ကို ဖတ်မရလို့ backup ဗလာ ဖြစ်သွားမှာပါ",
+        "th": "⚠️ ข้ามการสำรองข้อมูล — อ่าน Gist ไม่ได้ ไฟล์สำรองจะว่างเปล่า",
+    },
     "err.owner_only": {
         "en": "🔒 This command is for the bot owner only",
         "my": "🔒 ဒီ command က bot owner အတွက်သာ ဖြစ်ပါတယ်",
@@ -925,6 +941,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🗑 /delete &lt;#&gt; — delete an entry\n"
                "📊 /portfolio — portfolio P&amp;L\n"
                "🩺 /status — bot health (owner)\n"
+               "🗄 /backup — backup file of your data (owner)\n"
                "📈 /history [N] — N-day price history\n"
                "⚙️ /setthreshold N — change drop alert %\n"
                "📈 /setrisethreshold N — change rise alert %\n"
@@ -951,6 +968,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🗑 /delete &lt;#&gt; — entry ဖျက်ပါ\n"
                "📊 /portfolio — Portfolio P&amp;L\n"
                "🩺 /status — bot အခြေအနေ (owner)\n"
+               "🗄 /backup — data backup file (owner)\n"
                "📈 /history [N] — N-day ဈေးသမိုင်း\n"
                "⚙️ /setthreshold N — Drop alert % ပြောင်းပါ\n"
                "📈 /setrisethreshold N — Rise alert % ပြောင်းပါ\n"
@@ -977,6 +995,7 @@ STRINGS: dict[str, dict[str, str]] = {
                "🗑 /delete &lt;#&gt; — ลบรายการ\n"
                "📊 /portfolio — กำไร/ขาดทุนพอร์ต\n"
                "🩺 /status — สถานะบอท (เจ้าของ)\n"
+               "🗄 /backup — ไฟล์สำรองข้อมูล (เจ้าของ)\n"
                "📈 /history [N] — ประวัติราคา N วัน\n"
                "⚙️ /setthreshold N — เปลี่ยน % แจ้งเตือนราคาลง\n"
                "📈 /setrisethreshold N — เปลี่ยน % แจ้งเตือนราคาขึ้น\n"
@@ -1017,6 +1036,15 @@ STRINGS: dict[str, dict[str, str]] = {
                "แก้ไข: รัน <code>setup_webhook.py</code> ใหม่ด้วย WEBHOOK_SECRET "
                "เดียวกับ Vercel หรือลบ webhook (<code>--delete</code>) "
                "แล้วเปิด workflow poller อีกครั้ง"),
+    },
+    "monitor.feed_failover": {
+        "en": ("🔀 <b>Price source switched</b>\n"
+               "{frozen} is stuck at {price}/oz, so the bot is using {backup} ({alt}/oz) "
+               "until it moves again"),
+        "my": ("🔀 <b>Price source ပြောင်းလိုက်ပြီ</b>\n"
+               "{frozen} က {price}/oz မှာ ရပ်နေလို့ ပြန်မလှုပ်မချင်း {backup} ({alt}/oz) ကို သုံးပါမည်"),
+        "th": ("🔀 <b>เปลี่ยนแหล่งราคาแล้ว</b>\n"
+               "{frozen} ค้างที่ {price}/oz บอทจึงใช้ {backup} ({alt}/oz) จนกว่าจะกลับมาขยับ"),
     },
     "monitor.feed_stuck": {
         "en": ("⚠️ <b>Spot has not moved for {hours}h of trading</b> ({price}/oz)\n"
