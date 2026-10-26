@@ -267,6 +267,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "my": "ℹ️ Gold drivers — context only, not a forecast",
         "th": "ℹ️ ปัจจัยขับเคลื่อนราคาทอง — เป็นบริบทเท่านั้น ไม่ใช่การพยากรณ์",
     },
+    "macro.year_high": {
+        "en": "  📍 {name} is at a 1-year high",
+        "my": "  📍 {name} သည် ၁ နှစ်အတွင်း အမြင့်ဆုံး ဖြစ်နေသည်",
+        "th": "  📍 {name} อยู่ที่จุดสูงสุดในรอบ 1 ปี",
+    },
+    "macro.year_low": {
+        "en": "  📍 {name} is at a 1-year low",
+        "my": "  📍 {name} သည် ၁ နှစ်အတွင်း အနိမ့်ဆုံး ဖြစ်နေသည်",
+        "th": "  📍 {name} อยู่ที่จุดต่ำสุดในรอบ 1 ปี",
+    },
+    "macro.above_pct": {
+        "en": "  📍 {name} is higher than on {pct}% of days in the past year",
+        "my": "  📍 {name} သည် လွန်ခဲ့သော ၁ နှစ်၏ ရက်ပေါင်း {pct}% ထက် မြင့်နေသည်",
+        "th": "  📍 {name} สูงกว่า {pct}% ของวันในรอบปีที่ผ่านมา",
+    },
+    "macro.below_pct": {
+        "en": "  📍 {name} is lower than on {pct}% of days in the past year",
+        "my": "  📍 {name} သည် လွန်ခဲ့သော ၁ နှစ်၏ ရက်ပေါင်း {pct}% ထက် နိမ့်နေသည်",
+        "th": "  📍 {name} ต่ำกว่า {pct}% ของวันในรอบปีที่ผ่านมา",
+    },
     "macro.title": {
         "en": "🌍 <b>Macro &amp; Fear</b>",
         "my": "🌍 <b>Macro &amp; Fear</b>",
