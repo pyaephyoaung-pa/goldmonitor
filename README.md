@@ -231,15 +231,15 @@ reading had an edge.
 **ML Model (after 100+ data points ≈ 4 days):**
 GradientBoosting classifier trained on historical features. Predicts price direction for 4h, 12h, and 24h horizons. Auto-retrains daily at 3am.
 
-Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
+Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Until a model passes, the ML lines, the outlook and the live hit-rate go to the **owner only**; subscribers see a one-line note instead. More data does not change the verdict: the same model trained on two years of hourly gold, and the pretrained forecasters Chronos-Bolt and Chronos-2, all failed the same test. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
 
 The TA reading appears in the morning message, price alerts and `/price`; `/predict`
 shows it next to the ML outlook.
 
 **Live accuracy tracking:** every evening the bot records its ML predictions, then
 scores them once they mature (4h/12h/24h later) against the actual price. The real
-hit-rate appears in `/predict` and the evening summary — so you can see whether the
-models work in the real world, not just in backtests.
+hit-rate appears in the owner's `/predict` and evening summary — so you can see whether
+the models work in the real world, not just in backtests.
 
 **Reliability:** price history is stored hourly (alert checks still run every 5
 minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert instead
@@ -802,15 +802,15 @@ reading had an edge.
 **ML Model (after 100+ data points ≈ 4 days):**
 GradientBoosting classifier trained on historical features. Predicts price direction for 4h, 12h, and 24h horizons. Auto-retrains daily at 3am.
 
-Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
+Accuracy is measured **out-of-sample** (train on the first 80%, score the most recent unseen 20%) and compared against a majority-class baseline. A horizon is only treated as a real signal when it beats that baseline (`✅edge`); otherwise it is labelled `⚠️no-edge` and the outlook says to treat the ML calls as noise. Until a model passes, the ML lines, the outlook and the live hit-rate go to the **owner only**; subscribers see a one-line note instead. More data does not change the verdict: the same model trained on two years of hourly gold, and the pretrained forecasters Chronos-Bolt and Chronos-2, all failed the same test. Gold is close to a random walk at the hourly scale, so do not be surprised when models show no edge — that is the honest result, not a bug.
 
 The TA reading appears in the morning message, price alerts and `/price`; `/predict`
 shows it next to the ML outlook.
 
 **Live accuracy tracking:** every evening the bot records its ML predictions, then
 scores them once they mature (4h/12h/24h later) against the actual price. The real
-hit-rate appears in `/predict` and the evening summary — so you can see whether the
-models work in the real world, not just in backtests.
+hit-rate appears in the owner's `/predict` and evening summary — so you can see whether
+the models work in the real world, not just in backtests.
 
 **Reliability:** price history is stored hourly (alert checks still run every 5
 minutes); if the monitor itself crashes, the owner gets a 🛑 Telegram alert instead
