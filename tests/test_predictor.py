@@ -1,9 +1,16 @@
 import math
+from datetime import datetime, timedelta, timezone
 import predictor
 
 
+_T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
 def _hist(prices):
-    return [{"thb_gram": p, "hour": 12, "weekday": 1, "usd_oz": p / 1000} for p in prices]
+    """Hourly rows, timestamped the way append_price writes them."""
+    return [{"ts": (_T0 + timedelta(hours=i)).isoformat(), "thb_gram": p,
+             "hour": 12, "weekday": 1, "usd_oz": p / 1000}
+            for i, p in enumerate(prices)]
 
 
 def test_calc_sma_and_ema_basic():
