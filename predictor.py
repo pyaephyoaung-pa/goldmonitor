@@ -1185,74 +1185,84 @@ def prediction_hit_rates(model_data: dict) -> dict:
 
 # ── Trend Analysis ──────────────────────────────────────────────
 
-def get_trend_summary(history: list) -> dict:
-    """Compute multi-timeframe trend summary."""
-    prices = [h["thb_gram"] for h in priced_points(history)]
-    if len(prices) < 2:
-        return {"error": "Not enough data"}
+# "24h change" used to be prices[-24]: 24 POINTS back. That is 23 hours on a
+# perfect hourly series — every window was off by one — and anything at all on
+# a real one. While GitHub ran the monitor 4–8 times a day, points sat ~4 hours
+# apart, so "24h" spanned about four days and "30d" about three months, and a
+# 720-point history kept those old points for weeks after the schedule was
+# fixed. Windows are now wall-clock hours, like the ML labels: the change since
+# the point nearest `latest - window`, reported only when a point lies close
+# enough to that moment to measure the window it is named for.
 
-    current = prices[-1]
+TREND_WINDOWS = {"1h": 1, "4h": 4, "24h": 24, "7d": 168, "30d": 720}
+# How far the reference point may sit from the window's start: a tenth of the
+# window, but at least half an hour (points are ~an hour apart). A "24h"
+# change measured over 31 hours is not reported as a 24h change.
+TREND_TOLERANCE = 0.1
+TREND_MIN_TOLERANCE = timedelta(minutes=30)
+# Windows that also get a high/low.
+TREND_RANGES = ("24h", "7d")
+# A streak counts consecutive hourly moves. Points further apart than this
+# end it: one step across a five-hour gap is not a "5h consecutive rise".
+STREAK_MAX_STEP = timedelta(minutes=90)
+
+
+def _point_near(times: list, target: datetime, tolerance: timedelta) -> int | None:
+    """Index of the point nearest `target`, or None if none is within tolerance."""
+    i = bisect.bisect_left(times, target)
+    best = None
+    for j in (i - 1, i):
+        if 0 <= j < len(times) and abs(times[j] - target) <= tolerance:
+            if best is None or abs(times[j] - target) < abs(times[best] - target):
+                best = j
+    return best
+
+
+def get_trend_summary(history: list) -> dict:
+    """Changes, highs/lows and the current streak over wall-clock windows.
+
+    A window with no point near its start is left out rather than measured
+    over the wrong span; every caller already treats a missing key as "not
+    available".
+    """
+    priced = priced_points(history)
+    if len(priced) < 2:
+        return {"error": "Not enough data"}
 
     def pct_change(old, new):
         return round(((new - old) / old) * 100, 3) if old else 0
 
-    result = {"current": current}
+    result = {"current": priced[-1]["thb_gram"]}
+    times, prices = _timeline(history)
+    if len(prices) < 2:
+        return result
+    latest, current = times[-1], prices[-1]
 
-    # 1-hour change
-    if len(prices) >= 2:
-        result["change_1h"] = pct_change(prices[-2], current)
+    for label, hours in TREND_WINDOWS.items():
+        window = timedelta(hours=hours)
+        tolerance = max(TREND_MIN_TOLERANCE, window * TREND_TOLERANCE)
+        j = _point_near(times, latest - window, tolerance)
+        if j is None or j == len(times) - 1:
+            continue
+        result[f"change_{label}"] = pct_change(prices[j], current)
+        if label in TREND_RANGES:
+            result[f"high_{label}"] = round(max(prices[j:]), 2)
+            result[f"low_{label}"] = round(min(prices[j:]), 2)
 
-    # 4-hour change
-    if len(prices) >= 4:
-        result["change_4h"] = pct_change(prices[-4], current)
-
-    # 24-hour change
-    if len(prices) >= 24:
-        result["change_24h"] = pct_change(prices[-24], current)
-
-    # 7-day change
-    if len(prices) >= 168:
-        result["change_7d"] = pct_change(prices[-168], current)
-
-    # 30-day change
-    if len(prices) >= 720:
-        result["change_30d"] = pct_change(prices[-720], current)
-
-    # Consecutive direction
-    streak = 0
-    direction = None
+    # Consecutive hourly moves in one direction, newest first.
+    streak, direction = 0, None
     for i in range(len(prices) - 1, 0, -1):
-        if prices[i] > prices[i - 1]:
-            if direction is None:
-                direction = "up"
-            if direction == "up":
-                streak += 1
-            else:
-                break
-        elif prices[i] < prices[i - 1]:
-            if direction is None:
-                direction = "down"
-            if direction == "down":
-                streak += 1
-            else:
-                break
-        else:
+        if times[i] - times[i - 1] > STREAK_MAX_STEP:
             break
+        step = ("up" if prices[i] > prices[i - 1]
+                else "down" if prices[i] < prices[i - 1] else None)
+        if step is None or (direction is not None and step != direction):
+            break
+        direction = step
+        streak += 1
 
     result["streak"] = streak
     result["streak_direction"] = direction or "flat"
-
-    # Period high/low
-    if len(prices) >= 24:
-        p24 = prices[-24:]
-        result["high_24h"] = round(max(p24), 2)
-        result["low_24h"] = round(min(p24), 2)
-
-    if len(prices) >= 168:
-        p7d = prices[-168:]
-        result["high_7d"] = round(max(p7d), 2)
-        result["low_7d"] = round(min(p7d), 2)
-
     return result
 
 
