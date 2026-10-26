@@ -264,6 +264,35 @@ def _write_files(file_dict: dict) -> bool:
         return False
 
 
+# ── Backup ──────────────────────────────────────────────────────
+#
+# Everything lives in one Gist, and nothing kept a second copy. The files the
+# owner could not rebuild are the ledger, the subscribers and their settings,
+# the price alerts, the bot settings and the price history. Model data is left
+# out: it is the largest file and the 3am retrain rebuilds it.
+
+BACKUP_FORMAT = "goldmonitor-backup-1"
+BACKUP_FILES = (BUY_LOG_FILE, SUBSCRIBERS_FILE, LEVEL_ALERTS_FILE,
+                BOT_STATE_FILE, PRICE_HISTORY_FILE)
+
+
+def backup_snapshot() -> dict | None:
+    """The backup set as one JSON-ready dict, or None if it cannot be trusted.
+
+    None when there is no Gist configured or it could not be read this run:
+    empty containers stand in for a failed read, and a backup of them would
+    look like a good backup of nothing.
+    """
+    if not GITHUB_TOKEN or not GIST_ID:
+        return None
+    files = {name: _read_file(name) for name in BACKUP_FILES}
+    if _writes_blocked(BACKUP_FILES):
+        return None
+    return {"format": BACKUP_FORMAT,
+            "created": datetime.now(BANGKOK_TZ).isoformat(),
+            "files": files}
+
+
 # ── Price History ───────────────────────────────────────────────
 
 # The analytics layer (trend windows, ML horizons, the 720-point/30-day cap)

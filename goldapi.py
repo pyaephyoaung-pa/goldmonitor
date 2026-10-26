@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytz
 import requests
@@ -64,13 +64,25 @@ _SPOT_SOURCES = (
 )
 
 
-def fetch_spot_usd() -> float | None:
-    """Fetch spot gold in USD/oz, trying each source in order."""
+# Which source answered the last fetch_spot_usd() call — so a caller that finds
+# the price frozen knows which source to leave out of the next one.
+last_spot_source: str | None = None
+
+
+def fetch_spot_usd(exclude: tuple = ()) -> float | None:
+    """Fetch spot gold in USD/oz, trying each source in order.
+
+    `exclude` names sources to skip — the one a caller has found frozen.
+    """
+    global last_spot_source
     last_err = None
     for name, source in _SPOT_SOURCES:
+        if name in exclude:
+            continue
         try:
             val = source()
             if val:
+                last_spot_source = name
                 return val
         except Exception as e:  # noqa: BLE001 - try next source
             last_err = e
@@ -117,6 +129,11 @@ def fetch_thb_rate() -> float | None:
 
 # ── Combined ────────────────────────────────────────────────────
 
+def thb_per_gram(usd_oz: float, thb_rate: float) -> float:
+    """THB per gram of 99.99% gold from spot USD/oz and the USD->THB rate."""
+    return round((usd_oz * thb_rate) / GRAMS_PER_TROY_OZ, 2)
+
+
 def get_gold_price(retries: int = 2) -> tuple:
     """Fetch gold price with retry + multi-source fallback.
 
@@ -128,8 +145,7 @@ def get_gold_price(retries: int = 2) -> tuple:
         thb_rate = fetch_thb_rate() if usd_oz is not None else None
 
         if usd_oz is not None and thb_rate is not None:
-            thb_gram = round((usd_oz * thb_rate) / GRAMS_PER_TROY_OZ, 2)
-            return thb_gram, round(usd_oz, 2), round(thb_rate, 2)
+            return thb_per_gram(usd_oz, thb_rate), round(usd_oz, 2), round(thb_rate, 2)
 
         if attempt < retries:
             print(f"[goldapi] retry {attempt + 1}/{retries} after fetch failure")
@@ -155,11 +171,38 @@ EASTERN = pytz.timezone("US/Eastern")
 STUCK_AFTER_OPEN_HOURS = 3.0
 
 
+def _easter(year: int) -> date:
+    """Easter Sunday (Gregorian), by the anonymous computus."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    m = (32 + 2 * e + 2 * i - h - k) % 7
+    n = (a + 11 * h + 22 * m) // 451
+    month, day = divmod(h + m - 7 * n + 114, 31)
+    return date(year, month, day + 1)
+
+
+def market_holidays(year: int) -> set:
+    """Days spot gold does not trade at all: New York AND London both shut.
+
+    Good Friday, Christmas Day and New Year's Day. Other US holidays leave
+    London open — on Thanksgiving spot still moves — so they are not listed.
+    When Christmas or New Year falls on a weekend the substitute days differ
+    between the two markets, and one of them is usually open, so no
+    substitute is listed: at worst that costs the owner one warning.
+    """
+    return {_easter(year) - timedelta(days=2), date(year, 12, 25), date(year, 1, 1)}
+
+
 def market_should_be_open(t: datetime) -> bool:
     """Spot gold trades from 18:00 Sunday to 17:00 Friday New York time, with a
-    daily pause from 17:00 to 18:00. Holidays are not modelled: one can make a
-    quiet source look stuck, which costs the owner one warning."""
+    daily pause from 17:00 to 18:00, and not on market_holidays()."""
     et = t.astimezone(EASTERN)
+    if et.date() in market_holidays(et.year):
+        return False
     day, hour = et.weekday(), et.hour  # Monday = 0
     if day == 5:
         return False

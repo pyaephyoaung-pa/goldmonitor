@@ -19,6 +19,7 @@ import re
 import time
 import traceback
 import html as html_module
+import json
 from datetime import datetime, timedelta
 
 import pytz
@@ -1251,6 +1252,51 @@ def cmd_status(chat_id: str, lang: str):
     send_message("\n".join(lines), chat_id)
 
 
+def send_document(chat_id: str, filename: str, data: bytes, caption: str = "") -> dict | None:
+    """Send a file to a chat. Returns the API response, or None on failure."""
+    if not TG_BOT_TOKEN or not chat_id:
+        print(f"[bot] No credentials. Document {filename} not sent")
+        return None
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendDocument",
+            data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+            files={"document": (filename, data, "application/json")},
+            timeout=30,
+        )
+        resp = r.json()
+        if not resp.get("ok"):
+            print(f"[bot] sendDocument error: {resp.get('description')}")
+        return resp
+    except Exception as e:
+        print(f"[bot] sendDocument failed: {e}")
+        return None
+
+
+def send_backup(chat_id: str, lang: str) -> bool:
+    """Send the owner the backup file (storage.backup_snapshot). True if sent."""
+    snap = storage.backup_snapshot()
+    if snap is None:
+        send_message(i18n.t("backup.unavailable", lang), chat_id)
+        return False
+    files = snap["files"]
+    stamp = snap["created"][:10]
+    subs = files.get(storage.SUBSCRIBERS_FILE)
+    caption = i18n.t("backup.caption", lang, date=stamp,
+                     entries=len(files.get(storage.BUY_LOG_FILE) or []),
+                     points=len(files.get(storage.PRICE_HISTORY_FILE) or []),
+                     subscribers=len(subs) if isinstance(subs, list)
+                     else len(storage._subs_of(subs or {})))
+    data = json.dumps(snap, indent=1, ensure_ascii=False).encode("utf-8")
+    resp = send_document(chat_id, f"goldmonitor-backup-{stamp}.json", data, caption)
+    return bool(resp and resp.get("ok"))
+
+
+def cmd_backup(chat_id: str, lang: str):
+    """Owner: the backup file now, instead of waiting for the weekly one."""
+    send_backup(chat_id, lang)
+
+
 def cmd_help(chat_id: str, lang: str):
     send_message(i18n.t("help.text", lang), chat_id, reply_markup=main_keyboard(lang))
 
@@ -1291,6 +1337,7 @@ OWNER_COMMANDS = {
     "/setthreshold": cmd_setthreshold,
     "/setrisethreshold": cmd_setrisethreshold,
     "/status": lambda cid, _, lang: cmd_status(cid, lang),
+    "/backup": lambda cid, _, lang: cmd_backup(cid, lang),
 }
 
 COMMANDS = {**PUBLIC_COMMANDS, **OWNER_COMMANDS}

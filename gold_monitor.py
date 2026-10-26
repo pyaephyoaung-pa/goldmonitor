@@ -238,6 +238,82 @@ def warn_owner_if_runs_lag(state: dict, now: datetime) -> None:
         print(f"[monitor] run-gap check failed: {e}")
 
 
+# ── A frozen price source: switch, don't just warn ──────────────
+#
+# warn_owner_if_feed_stuck tells the owner when spot has sat still through
+# trading hours, but the bot kept using the frozen quote — alerts and the TA
+# reading stayed frozen until someone fixed the source. A second source is
+# already configured for outages; it now also stands in for a source that
+# answers with a stale price. The frozen source and price are remembered in
+# _bot_state: once the stand-in's prices are stored, the frozen quote no
+# longer matches the history, and without the memory the bot would switch
+# back to it on the next run.
+
+def failover_if_frozen(thb_gram: float, usd_oz: float, thb_rate: float,
+                       now: datetime) -> tuple:
+    """(thb_gram, usd_oz, state_changed), from another source if this one is frozen."""
+    source = goldapi.last_spot_source
+    frozen = _bot_state.get("spot_frozen") or {}
+    known = frozen.get("source") == source and frozen.get("price") == usd_oz
+    changed = False
+    if not known:
+        if frozen:
+            # The stuck source moved again: back to normal.
+            _bot_state.pop("spot_frozen", None)
+            changed = True
+        try:
+            hours = goldapi.hours_frozen(storage.get_price_history(), usd_oz, now)
+        except Exception as e:
+            print(f"[monitor] freeze check failed: {e}")
+            return thb_gram, usd_oz, changed
+        if hours < goldapi.STUCK_AFTER_OPEN_HOURS:
+            return thb_gram, usd_oz, changed
+    alt = goldapi.fetch_spot_usd(exclude=(source,))
+    if alt is None or round(alt, 2) == usd_oz:
+        # Nothing better to switch to; the feed watchdog will tell the owner.
+        return thb_gram, usd_oz, changed
+    alt = round(alt, 2)
+    if not known:
+        _bot_state["spot_frozen"] = {"source": source, "price": usd_oz,
+                                     "since": now.isoformat()}
+        changed = True
+        if TG_CHAT_ID:
+            bot_core.send_message(i18n.t(
+                "monitor.feed_failover", storage.get_user_lang(TG_CHAT_ID),
+                frozen=source, price=fmt_usd(usd_oz),
+                backup=goldapi.last_spot_source, alt=fmt_usd(alt)), TG_CHAT_ID)
+    print(f"  Spot source {source!r} frozen at {usd_oz}: "
+          f"using {goldapi.last_spot_source!r} = {alt}")
+    return goldapi.thb_per_gram(alt, thb_rate), alt, changed
+
+
+# ── Weekly backup to the owner ──────────────────────────────────
+# storage.backup_snapshot, sent as a file once a week in the BKK evening.
+# Half a day of slack keeps it on the same evening each week instead of
+# drifting later by a run or two every time.
+
+BACKUP_EVERY_DAYS = 7
+BACKUP_HOURS = range(21, 24)
+
+
+def send_weekly_backup(now: datetime) -> bool:
+    """True when a backup went out and _bot_state should be saved."""
+    if not TG_CHAT_ID or now.hour not in BACKUP_HOURS:
+        return False
+    last = _bot_state.get("backup_sent_at")
+    try:
+        if last and (now - datetime.fromisoformat(last)).total_seconds() < (
+                BACKUP_EVERY_DAYS - 0.5) * 86400:
+            return False
+    except (TypeError, ValueError):
+        pass  # unreadable stamp: send, rather than never again
+    if not bot_core.send_backup(TG_CHAT_ID, storage.get_user_lang(TG_CHAT_ID)):
+        return False
+    _bot_state["backup_sent_at"] = now.isoformat()
+    print("  Weekly backup sent to the owner")
+    return True
+
+
 # ── Heads-up before a scheduled release ─────────────────────────
 #
 # The calendar only reached people as a banner on an alert or a line in the
@@ -366,6 +442,11 @@ def main():
         return
 
     print(f"  Gold: {fmt(thb_gram)}/g (${usd_oz}/oz) [THB rate: {thb_rate}]")
+
+    # A source answering with a frozen quote is swapped out before the quote
+    # is stored, alerted on, or fed to the TA reading.
+    thb_gram, usd_oz, failover_changed = failover_if_frozen(
+        thb_gram, usd_oz, thb_rate, now)
 
     # ── Store Price History ─────────────────────────────────────
     history = storage.append_price(thb_gram, usd_oz, thb_rate)
@@ -774,12 +855,14 @@ def main():
             print("[ML] Model data saved to Gist")
 
     # ── One-off notices ─────────────────────────────────────────
-    # A heads-up before each release, and the owner's average-cost crossing.
-    # Both remember what they said in _bot_state, so neither repeats.
+    # A heads-up before each release, the owner's average-cost crossing and
+    # the weekly backup. Each remembers what it did in _bot_state, so none
+    # repeats — saved together with any source switch made above.
     try:
         headsup = announce_upcoming_events(now)
         cost = alert_owner_on_cost_cross(thb_gram)
-        if headsup or cost:
+        backup = send_weekly_backup(now)
+        if headsup or cost or backup or failover_changed:
             storage.save_bot_state(_bot_state)
     except Exception as e:
         print(f"[monitor] notices failed: {e}")
